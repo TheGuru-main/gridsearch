@@ -3,6 +3,55 @@ const cors = require('cors');
 const { calculate_lsum, calculate_ssum, first_letter_index, gsp_place, elasticCloud } = require('./gsp');
 const { findTopic } = require('./knowledge');
 
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
+
+const JWT_SECRET = process.env.JWT_SECRET || 'gridsearch-secret-change-in-production';
+const users = {}; // In‑memory user store (replace with Wizard DB later)
+
+// ── Auth Middleware ──────────────────────────────────
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  if (!token) return res.sendStatus(401);
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) return res.sendStatus(403);
+    req.user = user;
+    next();
+  });
+}
+
+// ── Sign‑up ────────────────────────────────────────
+app.post('/api/signup', async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
+  if (users[email]) return res.status(409).json({ error: 'User already exists' });
+
+  const hashedPassword = await bcrypt.hash(password, 10);
+  users[email] = { email, password: hashedPassword };
+  const token = jwt.sign({ email }, JWT_SECRET, { expiresIn: '7d' });
+  res.status(201).json({ token, email });
+});
+
+// ── Login ─────────────────────────────────────────
+app.post('/api/login', async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
+  const user = users[email];
+  if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+
+  const valid = await bcrypt.compare(password, user.password);
+  if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
+
+  const token = jwt.sign({ email }, JWT_SECRET, { expiresIn: '7d' });
+  res.json({ token, email });
+});
+
+// ── Check session ──────────────────────────────────
+app.get('/api/me', authenticateToken, (req, res) => {
+  res.json({ email: req.user.email });
+});
+
 const app = express();
 app.use(cors());
 app.use(express.json());
