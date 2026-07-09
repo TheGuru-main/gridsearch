@@ -1,2 +1,0 @@
-# gridsearch
-  SEARCH • Explore • Connect
