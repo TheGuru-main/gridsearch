@@ -6,7 +6,7 @@ OpenBox.CONFIG = {
     ESCROW_KEY: 'openbox_escrows',
     UNIVERSAL_UID: "550198550199",
     WELCOME_BYFLINTS: 1070,
-    UPLOAD_FEE: { app: 15, game: 20, video: 10, other: 5 },
+    UPLOAD_FEE = {"app": 150_000, "game": 2_000_000, "video": 100_000, "other": 0},
     DOWNLOAD_FEE: 3,
     UPLOADER_SHARE: 2.5,
     CATEGORY_COL: { app: 0, game: 1, video: 2, other: 3 },
