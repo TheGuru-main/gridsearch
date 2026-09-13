@@ -45,8 +45,8 @@ POSITION_BONUS = {"GK": 23, "DEF": 30, "MID": 40, "FWD": 60,
 # OpenBox 4-column grid: category → column index
 CATEGORY_COL = {"app": 0, "game": 1, "video": 2, "other": 3}
 
-UPLOAD_FEE = {"app": 150,000, "game": 2,000,000, "video": 100,000, "other": 0}
-DOWNLOAD_FEE = 3,000
+UPLOAD_FEE = {"app": 150_000, "game": 2_000_000, "video": 100_000, "other": 0}
+DOWNLOAD_FEE = 3_000
 UPLOADER_SHARE = 2.5
 PLATFORM_SHARE = 0.5
 
