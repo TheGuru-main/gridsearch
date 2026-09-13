@@ -27,26 +27,26 @@ WELCOME_BYFLINTS = 1070
 
 # Minimum byflints per player, per tournament tier
 TOURNAMENT_BASE = {
-    "npfl": 120, "egypt_pl": 140, "sa_psl": 140, "botola": 140,
-    "cafcl": 250, "cafcc": 250,
-    "brasileirao_b": 280, "brasileirao_a": 350, "argentina_primera": 350,
-    "mls": 400, "ligamx": 400, "j1": 400, "saudi_pl": 450,
+    "npfl": 190, "egypt_pl": 183, "sa_psl": 190, "botola": 170,
+    "cafcl": 450, "cafcc": 450,
+    "brasileirao_b": 380, "brasileirao_a": 390, "argentina_primera": 350,
+    "mls": 400, "ligamx": 200, "j1": 400, "saudi_pl": 450,
     "eredivisie": 400, "portugal": 450, "turkey": 400,
-    "epl": 600, "laliga": 600, "seriea": 600, "bundes": 550, "ligue1": 500,
+    "epl": 300, "laliga": 240, "seriea": 290, "bundes": 550, "ligue1": 300,
     "ucl": 800, "uel": 700, "uecl": 600,
     "libertadores": 500, "sudamericana": 450,
     "concacaf_cl": 450, "afc_cl": 500,
     "worldcup": 1000, "afcon": 800, "euro": 900, "copa_america": 800,
 }
 
-POSITION_BONUS = {"GK": 0, "DEF": 20, "MID": 40, "FWD": 80,
-                  "Goalkeeper": 0, "Defender": 20, "Midfielder": 40, "Attacker": 80}
+POSITION_BONUS = {"GK": 23, "DEF": 30, "MID": 40, "FWD": 60,
+                  "Goalkeeper": 23, "Defender": 30, "Midfielder": 40, "Attacker": 60}
 
 # OpenBox 4-column grid: category → column index
 CATEGORY_COL = {"app": 0, "game": 1, "video": 2, "other": 3}
 
-UPLOAD_FEE = {"app": 15, "game": 20, "video": 10, "other": 5}
-DOWNLOAD_FEE = 3
+UPLOAD_FEE = {"app": 150,000, "game": 2,000,000, "video": 100,000, "other": 0}
+DOWNLOAD_FEE = 3,000
 UPLOADER_SHARE = 2.5
 PLATFORM_SHARE = 0.5
 
