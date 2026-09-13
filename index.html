@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>OpenBox</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+
+    <!-- ═══════════════════════════════════════════════ -->
+    <!--  AUTH SCREEN                                     -->
+    <!-- ═══════════════════════════════════════════════ -->
+    <div id="authScreen" class="workspace active">
+        <h1>📦 OpenBox</h1>
+        <p>Open Market & Fantasy</p>
+        <div class="auth-tabs">
+            <a href="#" class="auth-tab active" data-auth-tab="login">Login</a>
+            <a href="#" class="auth-tab" data-auth-tab="signup">Sign Up</a>
+        </div>
+        <div id="loginPane" class="auth-pane active">
+            <input id="loginPhone" placeholder="Phone (UID)">
+            <input id="loginPassword" type="password" placeholder="Password">
+            <a href="#" id="btnLogin" class="primary-btn">Login</a>
+        </div>
+        <div id="signupPane" class="auth-pane">
+            <input id="signupName" placeholder="Full name">
+            <div class="phone-group">
+                <input id="signupDial" class="dial-input" readonly placeholder="+234">
+                <input id="signupPhone" placeholder="Phone (without leading zero)">
+            </div>
+            <select id="signupCountry">
+                <option value="">Select country</option>
+                <option value="NG">Nigeria (+234, 10 digits)</option>
+                <option value="GH">Ghana (+233, 9 digits)</option>
+                <option value="US">United States (+1, 10 digits)</option>
+                <option value="IN">India (+91, 10 digits)</option>
+                <option value="GB">United Kingdom (+44, 10 digits)</option>
+            </select>
+            <input id="signupEmail" type="email" placeholder="Email">
+            <input id="signupPassword" type="password" placeholder="Password">
+            <input id="signupDob" type="date">
+            <select id="signupTalent">
+                <option value="">Select talent</option>
+                <option value="Developer">Developer</option>
+                <option value="Designer">Designer</option>
+                <option value="Video Creator">Video Creator</option>
+                <option value="Musician">Musician</option>
+                <option value="Gamer">Gamer</option>
+                <option value="Writer">Writer</option>
+            </select>
+            <label class="checkbox">
+                <input type="checkbox" id="communityRules">
+                I agree to the <a href="#" data-action="show-rules">Community Rules</a>
+            </label>
+            <div class="welcome-note">🎁 New accounts receive <strong>1,070 byflints</strong></div>
+            <a href="#" id="btnSignup" class="primary-btn">Create Account</a>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════ -->
+    <!--  HOME — OpenBox files                            -->
+    <!-- ═══════════════════════════════════════════════ -->
+    <div id="workspaceHome" class="workspace">
+        <header class="top-header">
+            <h1>OpenBox</h1>
+            <div class="header-actions">
+                <a href="#" id="btnRefresh" class="icon-btn">🔄</a>
+                <a href="#" id="btnLogout" class="icon-btn">🚪</a>
+            </div>
+        </header>
+        <div class="search-box">
+            <input type="text" id="searchQuery" placeholder="Search files...">
+            <a href="#" id="btnSearch" class="search-btn">🔍</a>
+        </div>
+        <div class="category-tabs">
+            <a href="#" class="cat-tab active" data-category="app">Apps</a>
+            <a href="#" class="cat-tab" data-category="game">Games</a>
+            <a href="#" class="cat-tab" data-category="video">Videos</a>
+            <a href="#" class="cat-tab" data-category="other">Other</a>
+        </div>
+        <div id="categoryGrid" class="grid-container"></div>
+        <div id="searchResults" style="display:none;"></div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════ -->
+    <!--  MY HOME — Groups                                -->
+    <!-- ═══════════════════════════════════════════════ -->
+    <div id="workspaceMyHome" class="workspace">
+        <h2>🏠 My Home</h2>
+        <a href="#" id="btnCreateGroup" class="primary-btn">➕ Create Group</a>
+        <input id="inviteCodeInput" placeholder="Enter invite code">
+        <a href="#" id="btnJoinGroup" class="secondary-btn">Join Group</a>
+        <div id="groupsList" class="group-list"></div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════ -->
+    <!--  GROUP DETAIL                                    -->
+    <!-- ═══════════════════════════════════════════════ -->
+    <div id="workspaceGroupDetail" class="workspace">
+        <div class="top-header">
+            <a href="#" id="btnCloseGroupDetail" class="secondary-btn">← Back</a>
+            <h2 id="groupDetailTitle">Group</h2>
+        </div>
+        <div id="groupDetailInfo"></div>
+        <h3>Posts</h3>
+        <div id="groupPostsList" class="group-posts-list"></div>
+        <div class="chat-input">
+            <input id="groupPostInput" placeholder="Write a post...">
+            <a href="#" id="btnAddGroupPost" class="primary-btn">Post</a>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════ -->
+    <!--  UPLOAD                                          -->
+    <!-- ═══════════════════════════════════════════════ -->
+    <div id="workspaceUpload" class="workspace">
+        <h2>⬆️ Upload</h2>
+        <input type="file" id="fileInput">
+        <select id="uploadCategory">
+            <option value="app">App (15 byflints)</option>
+            <option value="game">Game (20 byflints)</option>
+            <option value="video">Video (10 byflints)</option>
+            <option value="other">Other (5 byflints)</option>
+        </select>
+        <input id="filenameInput" placeholder="File name">
+        <input id="priceByflint" type="number" placeholder="Download price (byflints)" min="0">
+        <input id="description" placeholder="Description">
+        <label class="checkbox"><input type="checkbox" id="originalityAgreement"> I confirm originality</label>
+        <div id="feeDisplay">Fee: 0 byflints</div>
+        <a href="#" id="btnUpload" class="primary-btn">Upload</a>
+        <a href="#" id="btnCloseUpload" class="secondary-btn">Cancel</a>
+        <div id="uploadStatus"></div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════ -->
+    <!--  MESSAGES                                        -->
+    <!-- ═══════════════════════════════════════════════ -->
+    <div id="workspaceMessages" class="workspace">
+        <div class="msg-header">
+            <a href="#" id="btnCloseChat" class="secondary-btn" style="display:none;">← Back</a>
+            <h2 id="chatPartner">Messages</h2>
+        </div>
+        <div id="conversationList" class="conversation-list"></div>
+        <div id="chatView" style="display:none; flex-direction: column; height: 70vh;">
+            <div id="chatMessages" class="chat-messages"></div>
+            <div class="chat-input">
+                <input id="messageInput" placeholder="Type message...">
+                <a href="#" id="btnSendMessage" class="primary-btn">Send</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════ -->
+    <!--  WALLET                                          -->
+    <!-- ═══════════════════════════════════════════════ -->
+    <div id="workspaceWallet" class="workspace">
+        <h2>👛 Byflint Wallet</h2>
+        <div class="wallet-card">
+            <div>Current Balance</div>
+            <div class="balance-amount" id="walletBalanceDisplay">0</div>
+            <div>byflints</div>
+        </div>
+        <div class="notice">
+            Byflints are earned and spent within OpenBox. No external purchase.
+            <br>Signup bonus: <strong>1,070 byflints</strong>. Earned back via uploads, downloads, and fantasy.
+        </div>
+        <h3>Transaction History</h3>
+        <div id="transactionHistory"></div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════ -->
+    <!--  FANTASY                                         -->
+    <!-- ═══════════════════════════════════════════════ -->
+    <div id="workspaceFantasy" class="workspace">
+        <header class="top-header">
+            <h2>⚽ Fantasy</h2>
+            <div class="fantasy-week" id="fantasyWeek"></div>
+        </header>
+        <div class="fantasy-tabs">
+            <a href="#" class="ftab active" data-ftab="tournaments">Tournaments</a>
+            <a href="#" class="ftab" data-ftab="hot">Hot</a>
+            <a href="#" class="ftab" data-ftab="transfers">Transfers</a>
+        </div>
+        <div id="fantasyBody"></div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════ -->
+    <!--  DETAIL SCREEN (item detail)                     -->
+    <!-- ═══════════════════════════════════════════════ -->
+    <div id="detailScreen" class="workspace">
+        <a href="#" id="btnCloseDetail" class="secondary-btn">← Back</a>
+        <h2 id="detailTitle"></h2>
+        <div id="detailContent"></div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════ -->
+    <!--  MODALS                                          -->
+    <!-- ═══════════════════════════════════════════════ -->
+    <div id="rulesModal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <h3>Community Rules</h3>
+            <p>1. No piracy or unauthorized content.</p>
+            <p>2. Be respectful in messages and groups.</p>
+            <p>3. Downloads use escrow.</p>
+            <p>4. Byflints are non-refundable, non-cashable.</p>
+            <p>5. Violations lead to suspension.</p>
+            <a href="#" id="btnCloseRules" class="secondary-btn">Close</a>
+        </div>
+    </div>
+
+    <div id="checkoutModal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <h3 id="checkoutTitle"></h3>
+            <p>Amount: <strong id="checkoutAmount"></strong> byflints</p>
+            <a href="#" id="btnConfirmCheckout" class="primary-btn">Confirm</a>
+            <a href="#" id="btnCloseCheckout" class="secondary-btn">Cancel</a>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════ -->
+    <!--  BOTTOM NAV                                      -->
+    <!-- ═══════════════════════════════════════════════ -->
+    <nav class="bottom-nav" id="bottomNav" style="display:none;">
+        <a href="#" data-workspace="workspaceHome" class="nav-link active">Home</a>
+        <a href="#" data-workspace="workspaceMyHome" class="nav-link">My Home</a>
+        <a href="#" data-workspace="workspaceUpload" class="nav-link">Upload</a>
+        <a href="#" data-workspace="workspaceFantasy" class="nav-link">Fantasy</a>
+        <a href="#" data-workspace="workspaceMessages" class="nav-link">Messages</a>
+        <a href="#" data-workspace="workspaceWallet" class="nav-link">Wallet</a>
+    </nav>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/gsp.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/wallet.js"></script>
+<script src="js/files.js"></script>
+<script src="js/messages.js"></script>
+<script src="js/groups.js"></script>
+<script src="js/fantasy.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/app.js"></script>
+<script src="js/bj_widget.js"></script>
+</body>
+</html>
