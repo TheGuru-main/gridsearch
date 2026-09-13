@@ -1,9 +1,7 @@
 /**
  * Fantasy Registry — tournaments as grids, clubs as columns.
- * Actual 2026-27 squads.
- * Corrections: Emiliano Martinez → Chelsea, Delap → Nottingham Forest,
- * Jackson → Aston Villa, Rashford → Man United (No. 9), Garnacho → Aston Villa.
  */
+
 window.OpenBox = window.OpenBox || {};
 
 OpenBox.FantasyRegistry = {
