@@ -597,6 +597,26 @@ def bzz_sync_ep(request: Request):
         return {"ok": False, "error": str(e), "traceback": traceback.format_exc()}
 
 
+@app.get("/api/admin/bzz-sync-all")
+def bzz_sync_all(request: Request):
+    _admin_guard(request)
+    from bzz_sync import start_sync_all
+    return start_sync_all()
+
+
+@app.get("/api/admin/bzz-progress")
+def bzz_progress(request: Request):
+    _admin_guard(request)
+    from bzz_sync import get_state
+    return get_state()
+
+
+@app.get("/api/admin/bzz-stop")
+def bzz_stop(request: Request):
+    _admin_guard(request)
+    from bzz_sync import stop_sync
+    return stop_sync()
+
 # ═══════════════════════════════════════════════════════
 #  ADMIN — Transfermarkt CSV (bulk import)
 # ═══════════════════════════════════════════════════════
