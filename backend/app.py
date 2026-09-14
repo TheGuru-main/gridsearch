@@ -8,6 +8,7 @@ GSP OpenBox + Fantasy — combined backend.
 """
 import os, time, uuid, hashlib
 from pathlib import Path
+import httpx, csv, io, time as _time
 from typing import Optional
 from fastapi import FastAPI, Request, HTTPException, Depends, UploadFile, File, Form
 from fastapi.responses import JSONResponse, FileResponse
@@ -16,7 +17,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from database import get_db, init_db
-from models import User, SessionToken, LedgerEntry, OpenBoxItem, Club, Player, Transfer
+from models import User, SessionToken, LedgerEntry, OpenBoxItem, Club, Player, Transfer, SyncLog
 from bubblejumbo_middleware import BubbleJumboMiddleware, bj_bridge
 
 # ═══════════════════════════════════════════════════════
@@ -552,32 +553,169 @@ def sp_sync(request: Request, league: str = "epl"):
     except Exception as e:
         return {"ok": False, "error": str(e), "traceback": traceback.format_exc()}
 
+# ═══════════════════════════════════════════════════════
+#  MULTI-SOURCE SCRAPER ADMIN
+# ═══════════════════════════════════════════════════════
+# ─── TheSportsDB ───
+TSDB_BASE = "https://www.thesportsdb.com/api/v1/json/3"
 
+@app.get("/api/admin/tsdb-test")
+def tsdb_test(request: Request):
+    if request.query_params.get("token", "") != SCRAPER_TOKEN:
+        raise HTTPException(403)
+    with httpx.Client(timeout=15) as c:
+        r = c.get(f"{TSDB_BASE}/all_leagues.php")
+    try:
+        data = r.json()
+        return {"status": r.status_code, "leagues_count": len(data.get("leagues") or [])}
+    except Exception:
+        return {"status": r.status_code, "raw": r.text[:300]}
+
+@app.get("/api/admin/tsdb-preview")
+def tsdb_preview(request: Request):
+    if request.query_params.get("token", "") != SCRAPER_TOKEN:
+        raise HTTPException(403)
+    league = request.query_params.get("league", "English Premier League")
+    with httpx.Client(timeout=20) as c:
+        r = c.get(f"{TSDB_BASE}/search_all_teams.php", params={"l": league})
+    try:
+        data = r.json()
+        teams = data.get("teams") or []
+        return {"status": r.status_code, "count": len(teams),
+                "teams": [{"id": t.get("idTeam"), "name": t.get("strTeam"),
+                           "stadium": t.get("strStadium")} for t in teams[:25]]}
+    except Exception:
+        return {"status": r.status_code, "raw": r.text[:300]}
+
+@app.get("/api/admin/tsdb-sync")
+def tsdb_sync(request: Request):
+    if request.query_params.get("token", "") != SCRAPER_TOKEN:
+        raise HTTPException(403)
+    league = request.query_params.get("league", "English Premier League")
+    from tsdb_sync import sync_league
+    try:
+        return sync_league(league)
+    except Exception as e:
+        import traceback
+        return {"ok": False, "error": str(e), "traceback": traceback.format_exc()}
+
+# ─── Bzzoiro ───
+BZZ_BASE = "https://sports.bzzoiro.com/api/v2"
+
+def _bzz_headers():
+    import os
+    t = os.environ.get("BZZOIRO_TOKEN", "")
+    return {"Authorization": f"Token {t}"} if t else {}
+
+@app.get("/api/admin/bzz-test")
+def bzz_test(request: Request):
+    if request.query_params.get("token", "") != SCRAPER_TOKEN:
+        raise HTTPException(403)
+    h = _bzz_headers()
+    if not h:
+        return {"error": "BZZOIRO_TOKEN not set on Render. Register at sports.bzzoiro.com/register, then add env var."}
+    with httpx.Client(timeout=15) as c:
+        r = c.get(f"{BZZ_BASE}/leagues/", headers=h)
+    try:
+        return {"status": r.status_code, "body": r.json()}
+    except Exception:
+        return {"status": r.status_code, "raw": r.text[:300]}
+
+@app.get("/api/admin/bzz-leagues")
+def bzz_leagues(request: Request):
+    if request.query_params.get("token", "") != SCRAPER_TOKEN:
+        raise HTTPException(403)
+    h = _bzz_headers()
+    if not h: return {"error": "BZZOIRO_TOKEN not set"}
+    results = []
+    url = f"{BZZ_BASE}/leagues/"
+    with httpx.Client(timeout=20) as c:
+        while url and len(results) < 200:
+            r = c.get(url, headers=h)
+            if r.status_code != 200: break
+            data = r.json()
+            results.extend(data.get("results") or [])
+            url = data.get("next")
+    return {"count": len(results),
+            "leagues": [{"id": l.get("id"), "name": l.get("name"),
+                         "country": l.get("country")} for l in results]}
+
+@app.get("/api/admin/bzz-sync")
+def bzz_sync(request: Request):
+    if request.query_params.get("token", "") != SCRAPER_TOKEN:
+        raise HTTPException(403)
+    lid = request.query_params.get("league_id", "")
+    if not lid: raise HTTPException(400, "league_id required")
+    from bzz_sync import sync_league
+    try:
+        return sync_league(int(lid))
+    except Exception as e:
+        import traceback
+        return {"ok": False, "error": str(e), "traceback": traceback.format_exc()}
+
+# ─── Transfermarkt CSV ───
+@app.get("/api/admin/tm-check")
+def tm_check(request: Request):
+    if request.query_params.get("token", "") != SCRAPER_TOKEN:
+        raise HTTPException(403)
+    url = "https://raw.githubusercontent.com/salimt/football-datasets/main/datalake/transfermarkt/raw/player_profiles/player_profiles.csv"
+    with httpx.Client(timeout=20, follow_redirects=True) as c:
+        r = c.head(url)
+    return {"available": r.status_code == 200, "status": r.status_code,
+            "size_bytes": r.headers.get("content-length"),
+            "source": "github.com/salimt/football-datasets"}
+
+@app.post("/api/admin/tm-import")
+def tm_import(request: Request):
+    if request.query_params.get("token", "") != SCRAPER_TOKEN:
+        raise HTTPException(403)
+    from tm_import import import_all
+    try:
+        return import_all()
+    except Exception as e:
+        import traceback
+        return {"ok": False, "error": str(e), "traceback": traceback.format_exc()}
+
+# ─── DB helpers ───
 @app.get("/api/admin/db-counts")
 def db_counts(request: Request):
-    """Report what's currently in Neon."""
     if request.query_params.get("token", "") != SCRAPER_TOKEN:
-        raise HTTPException(403, "Forbidden")
-    from models import Club, Player, SyncLog
+        raise HTTPException(403)
+    from collections import Counter
     db = SessionLocal()
     try:
-        by_tournament = db.query(
-            Club.tournament_id, Club.id
-        ).all()
-        from collections import Counter
-        clubs_by_t = Counter(c.tournament_id for c in by_tournament)
-        players_by_t = Counter(p.tournament_id for p in db.query(Player).all())
+        clubs = db.query(Club).all()
+        players = db.query(Player).all()
         return {
-            "clubs_total": db.query(Club).count(),
-            "players_total": db.query(Player).count(),
-            "clubs_by_tournament": dict(clubs_by_t),
-            "players_by_tournament": dict(players_by_t),
-            "recent_logs": [
-                {"task": r.task, "status": r.status, "count": r.count,
-                 "ran_at": r.ran_at, "message": r.message}
-                for r in db.query(SyncLog).order_by(SyncLog.ran_at.desc()).limit(15).all()
-            ],
+            "clubs_total": len(clubs),
+            "players_total": len(players),
+            "clubs_by_tournament": dict(Counter(c.tournament_id for c in clubs)),
+            "players_by_tournament": dict(Counter(p.tournament_id for p in players)),
         }
+    finally:
+        db.close()
+
+@app.get("/api/admin/db-logs")
+def db_logs(request: Request):
+    if request.query_params.get("token", "") != SCRAPER_TOKEN:
+        raise HTTPException(403)
+    db = SessionLocal()
+    try:
+        rows = db.query(SyncLog).order_by(SyncLog.ran_at.desc()).limit(30).all()
+        return {"logs": [{"task": r.task, "status": r.status, "count": r.count,
+                          "message": r.message, "ran_at": r.ran_at} for r in rows]}
+    finally:
+        db.close()
+
+@app.post("/api/admin/db-wipe-players")
+def db_wipe_players(request: Request):
+    if request.query_params.get("token", "") != SCRAPER_TOKEN:
+        raise HTTPException(403)
+    db = SessionLocal()
+    try:
+        n = db.query(Player).delete()
+        db.commit()
+        return {"ok": True, "deleted": n}
     finally:
         db.close()
 
