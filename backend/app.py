@@ -478,7 +478,7 @@ def admin_scraper_diag(request: Request):
 
 
 @app.get("/api/admin/run-scraper")
-async def admin_run_scraper(request: Request):
+def admin_run_scraper(request: Request):
     """Runs the scraper synchronously so errors come back in the HTTP response."""
     if request.query_params.get("token", "") != SCRAPER_TOKEN:
         raise HTTPException(403, "Forbidden")
