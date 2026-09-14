@@ -3,22 +3,59 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>OpenBox/GlobalSoccerFantasy</title>
+    <title>🏆 GlobalSoccerFantasy — OpenBox</title>
     <link rel="stylesheet" href="style.css">
     <style>
-        /* Small additions for field labels and hints (safe to leave here) */
+        /* ─── Monospace everything ─── */
+        :root {
+            --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Menlo', 'Consolas', 'Liberation Mono', monospace;
+            --gold: #ffd700;
+            --gold-2: #ffb300;
+            --ink: #111;
+        }
+        html, body, input, select, textarea, button, a, div, span, p, h1, h2, h3, h4, small, label {
+            font-family: var(--font-mono) !important;
+        }
+
+        /* ─── Global header brand ─── */
+        .brand {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            font-weight: 800;
+            letter-spacing: 0.05em;
+            background: linear-gradient(135deg, #6c5ce7 0%, #00d2ff 60%, #ffd700 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-transform: uppercase;
+        }
+        .brand-xl { font-size: 2rem; margin-bottom: 0.25rem; }
+        .brand-lg { font-size: 1.35rem; }
+        .brand-sub {
+            text-align: center;
+            color: #888;
+            font-size: 0.75rem;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            margin-bottom: 1rem;
+        }
+
+        /* ─── Field labels + hints ─── */
         .field-label {
             display: block;
-            font-size: 0.85rem;
-            font-weight: 600;
-            color: #333;
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: #222;
             margin-top: 0.6rem;
             margin-bottom: 0.25rem;
             text-align: left;
+            letter-spacing: 0.03em;
         }
         .field-hint {
             display: block;
-            font-size: 0.72rem;
+            font-size: 0.7rem;
             color: #666;
             margin-top: -0.35rem;
             margin-bottom: 0.55rem;
@@ -27,9 +64,34 @@
         .field-hint.req { color: #b45309; }
         .field-group { margin-bottom: 0.3rem; }
         .auth-pane input,
-        .auth-pane select {
-            margin-top: 0.15rem;
+        .auth-pane select { margin-top: 0.15rem; }
+
+        /* ─── Headers ─── */
+        .top-header h1,
+        .msg-header h2,
+        h2.section-title {
+            font-weight: 800;
+            letter-spacing: 0.04em;
+            background: linear-gradient(120deg, #6c5ce7 0%, #00d2ff 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
+
+        /* ─── Workspace headers ─── */
+        .workspace > h2 {
+            font-size: 1.2rem;
+            font-weight: 800;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            background: linear-gradient(120deg, #111 0%, #6c5ce7 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 0.9rem;
+        }
+
+        .welcome-note { font-size: 0.8rem; letter-spacing: 0.02em; }
     </style>
 </head>
 <body>
@@ -39,8 +101,9 @@
     <!--  AUTH SCREEN                                     -->
     <!-- ═══════════════════════════════════════════════ -->
     <div id="authScreen" class="workspace active">
-        <h1>📦 GSP OpenBox/ 🏆GlobalSoccerFantasy</h1>
-        <p>Open Market & Fantasy</p>
+        <h1 class="brand brand-xl">🏆 GlobalSoccerFantasy</h1>
+        <div class="brand-sub">OpenBox · Open Market · Fantasy</div>
+
         <div class="auth-tabs">
             <a href="#" class="auth-tab active" data-auth-tab="login">Login</a>
             <a href="#" class="auth-tab" data-auth-tab="signup">Sign Up</a>
@@ -50,14 +113,13 @@
         <div id="loginPane" class="auth-pane active">
             <div class="field-group">
                 <label class="field-label" for="loginPhone">Phone (UID)</label>
-                <input id="loginPhone" placeholder="e.g. 23481234567">
+                <input id="loginPhone" placeholder="e.g. 23481234567" autocomplete="tel">
             </div>
             <div class="field-group">
                 <label class="field-label" for="loginPassword">Password</label>
-                <input id="loginPassword" type="password" placeholder="Your password">
+                <input id="loginPassword" type="password" placeholder="Your password" autocomplete="current-password">
             </div>
-            <a href="#" id="btnLogin" class="primary-btn"
-               onclick="event.preventDefault(); OpenBox.Auth.login();">Login</a>
+            <a href="#" id="btnLogin" class="primary-btn">Login</a>
         </div>
 
         <!-- SIGNUP -->
@@ -65,18 +127,18 @@
 
             <div class="field-group">
                 <label class="field-label" for="signupName">Full Name</label>
-                <input id="signupName" placeholder="e.g. Jane Doe">
+                <input id="signupName" placeholder="e.g. Jane Doe" autocomplete="name">
             </div>
 
             <div class="field-group">
                 <label class="field-label" for="signupCountry">Country</label>
                 <select id="signupCountry">
-                    <option value="">Select country</option>
-                    <option value="NG">Nigeria (+234, 10 digits)</option>
-                    <option value="GH">Ghana (+233, 9 digits)</option>
-                    <option value="US">United States (+1, 10 digits)</option>
-                    <option value="IN">India (+91, 10 digits)</option>
-                    <option value="GB">United Kingdom (+44, 10 digits)</option>
+                    <option value="">— Select country —</option>
+                    <option value="NG">Nigeria (+234 · 10 digits)</option>
+                    <option value="GH">Ghana (+233 · 9 digits)</option>
+                    <option value="US">United States (+1 · 10 digits)</option>
+                    <option value="IN">India (+91 · 10 digits)</option>
+                    <option value="GB">United Kingdom (+44 · 10 digits)</option>
                 </select>
                 <small class="field-hint">Select your country to auto-fill the dial code</small>
             </div>
@@ -85,19 +147,19 @@
                 <label class="field-label" for="signupPhone">Phone Number (UID)</label>
                 <div class="phone-group">
                     <input id="signupDial" class="dial-input" readonly placeholder="+234">
-                    <input id="signupPhone" placeholder="Phone without leading zero">
+                    <input id="signupPhone" placeholder="Phone without leading zero" autocomplete="tel">
                 </div>
                 <small class="field-hint">Digits only. No leading zero. Must match your country's length.</small>
             </div>
 
             <div class="field-group">
                 <label class="field-label" for="signupEmail">Email</label>
-                <input id="signupEmail" type="email" placeholder="you@example.com">
+                <input id="signupEmail" type="email" placeholder="you@example.com" autocomplete="email">
             </div>
 
             <div class="field-group">
                 <label class="field-label" for="signupPassword">Password</label>
-                <input id="signupPassword" type="password" placeholder="Create a password">
+                <input id="signupPassword" type="password" placeholder="Create a password" autocomplete="new-password">
             </div>
 
             <div class="field-group">
@@ -109,7 +171,7 @@
             <div class="field-group">
                 <label class="field-label" for="signupTalent">Talent</label>
                 <select id="signupTalent">
-                    <option value="">Select talent</option>
+                    <option value="">— Select talent —</option>
                     <option value="Developer">Developer</option>
                     <option value="Designer">Designer</option>
                     <option value="Video Creator">Video Creator</option>
@@ -126,8 +188,7 @@
 
             <div class="welcome-note">🎁 New accounts receive <strong>1,070 byflints</strong></div>
 
-            <a href="#" id="btnSignup" class="primary-btn"
-               onclick="event.preventDefault(); OpenBox.Auth.signup();">Create Account</a>
+            <a href="#" id="btnSignup" class="primary-btn">Create Account</a>
         </div>
     </div>
 
@@ -136,7 +197,7 @@
     <!-- ═══════════════════════════════════════════════ -->
     <div id="workspaceHome" class="workspace">
         <header class="top-header">
-            <h1>OpenBox</h1>
+            <h1 class="brand brand-lg">🏆 GlobalSoccerFantasy</h1>
             <div class="header-actions">
                 <a href="#" id="btnRefresh" class="icon-btn">🔄</a>
                 <a href="#" id="btnLogout" class="icon-btn">🚪</a>
@@ -247,7 +308,7 @@
     <!-- ═══════════════════════════════════════════════ -->
     <div id="workspaceFantasy" class="workspace">
         <header class="top-header">
-            <h2>⚽ Fantasy</h2>
+            <h2 class="brand brand-lg">🏆 GlobalSoccerFantasy</h2>
             <div class="fantasy-week" id="fantasyWeek"></div>
         </header>
         <div class="fantasy-tabs">
@@ -317,5 +378,58 @@
 <script src="js/fantasy_registry.js"></script>
 <script src="js/app.js"></script>
 <script src="js/bubblejumbo_widget.js"></script>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!--  FALLBACK WIRING + DIAGNOSTICS                   -->
+<!--  Runs after all scripts load.                    -->
+<!-- ═══════════════════════════════════════════════ -->
+<script>
+(function () {
+    function safeWire(id, handlerName) {
+        const el = document.getElementById(id);
+        if (!el) { console.warn('[wire] missing element', id); return; }
+        el.addEventListener('click', function (e) {
+            e.preventDefault();
+            const parts = handlerName.split('.');
+            let obj = window;
+            for (let i = 0; i < parts.length; i++) {
+                obj = obj?.[parts[i]];
+                if (obj === undefined) break;
+            }
+            if (typeof obj === 'function') {
+                obj();
+            } else {
+                console.error('[wire] handler not found:', handlerName, ' window.OpenBox =', window.OpenBox);
+                alert('App not fully loaded. Check console (F12) for the error.');
+            }
+        });
+    }
+
+    window.addEventListener('DOMContentLoaded', function () {
+        // Wire buttons with a safe fallback (in addition to the global ui.js handler)
+        safeWire('btnLogin',  'OpenBox.Auth.login');
+        safeWire('btnSignup', 'OpenBox.Auth.signup');
+        safeWire('btnLogout', 'OpenBox.Auth.logout');
+
+        // Diagnostic: verify scripts loaded
+        const checks = [
+            ['OpenBox',            window.OpenBox],
+            ['OpenBox.API',        window.OpenBox?.API],
+            ['OpenBox.Auth',       window.OpenBox?.Auth],
+            ['OpenBox.Auth.signup',window.OpenBox?.Auth?.signup],
+        ];
+        console.group('🏆 GlobalSoccerFantasy — load check');
+        checks.forEach(([name, val]) => {
+            console.log(val ? '✔ ' + name : '✘ MISSING: ' + name, val || '');
+        });
+        console.groupEnd();
+    });
+
+    // Surface any runtime error clearly
+    window.addEventListener('error', function (e) {
+        console.error('[Runtime Error]', e.message, '@', e.filename, ':', e.lineno);
+    });
+})();
+</script>
 </body>
 </html>
