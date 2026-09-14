@@ -698,7 +698,6 @@ def db_wipe_all(request: Request):
 
 
 # ═══════════════════════════════════════════════════════
-#  STATIC — m
-feed front
+#  STATIC — feedfront
 # ═══════════════════════════════════════════════════════
 app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
