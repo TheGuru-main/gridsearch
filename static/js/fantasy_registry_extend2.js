@@ -470,7 +470,7 @@
         {id:"bangkok",name:"BG Pathum United"}
     ]};
 
-    /* ═══════════════════════════════════════════════
+   /* ═══════════════════════════════════════════════
        AFRICA CUP OF NATIONS 2027 — 24 teams
        ═══════════════════════════════════════════════ */
     R.afcon = { id:"afcon", name:"Africa Cup of Nations 2027", region:"International", type:"international", cols:30, rows:100, clubs:[
@@ -486,4 +486,19 @@
         {id:"civ",name:"Côte d'Ivoire"},
         {id:"cmr",name:"Cameroon"},
         {id:"gha",name:"Ghana"},
+        {id:"rsa",name:"South Africa"},
+        {id:"cod",name:"DR Congo"},
+        {id:"bur",name:"Burkina Faso"},
+        {id:"mli",name:"Mali"},
+        {id:"gui",name:"Guinea"},
+        {id:"cpv",name:"Cabo Verde"},
+        {id:"ang",name:"Angola"},
+        {id:"zam",name:"Zambia"},
+        {id:"moz",name:"Mozambique"},
+        {id:"eqg",name:"Equatorial Guinea"},
+        {id:"gab",name:"Gabon"},
+        {id:"sud",name:"Sudan"}
+    ]};
+
+})();
         
