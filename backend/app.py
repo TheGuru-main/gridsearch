@@ -1,4 +1,4 @@
-b"""
+"""
 GSP OpenBox + Fantasy — combined backend.
 - Auth: SQLite users, 1070 byflints at signup
 - Wallet: ledger-backed balance
