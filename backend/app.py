@@ -27,12 +27,12 @@ WELCOME_BYFLINTS = 1_070
 
 # Minimum byflints per player, per tournament tier
 TOURNAMENT_BASE = {
-    "npfl": 190, "egypt_pl": 183, "sa_psl": 190, "botola": 170,
+    "npfl": 200, "egypt_pl": 183, "sa_psl": 190, "botola": 170,
     "cafcl": 450, "cafcc": 450,
-    "brasileirao_b": 380, "brasileirao_a": 390, "argentina_primera": 350,
-    "mls": 400, "ligamx": 200, "j1": 400, "saudi_pl": 450,
-    "eredivisie": 400, "portugal": 450, "turkey": 400,
-    "epl": 300, "laliga": 240, "seriea": 290, "bundes": 550, "ligue1": 300,
+    "brasileirao_b": 180, "brasileirao_a": 190, "argentina_primera": 170,
+    "mls": 300, "ligamx": 200, "j1": 200, "saudi_pl": 250,
+    "eredivisie": 190, "portugal": 250, "turkey":180,
+    "epl": 300, "laliga": 240, "seriea": 290, "bundes": 250, "ligue1": 300,
     "ucl": 800, "uel": 700, "uecl": 600,
     "libertadores": 500, "sudamericana": 450,
     "concacaf_cl": 450, "afc_cl": 500,
