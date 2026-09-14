@@ -119,7 +119,8 @@
                 <label class="field-label" for="loginPassword">Password</label>
                 <input id="loginPassword" type="password" placeholder="Your password" autocomplete="current-password">
             </div>
-            <a href="#" id="btnLogin" class="primary-btn">Login</a>
+            <a href="#" id="btnLogin" class="primary-btn"
+   onclick="event.preventDefault(); if (window.OpenBox && OpenBox.Auth) { OpenBox.Auth.login(); } else { alert('App not loaded — check console (F12)'); }">Login</a>
         </div>
 
         <!-- SIGNUP -->
@@ -188,7 +189,8 @@
 
             <div class="welcome-note">🎁 New accounts receive <strong>1,070 byflints</strong></div>
 
-            <a href="#" id="btnSignup" class="primary-btn">Create Account</a>
+           <a href="#" id="btnSignup" class="primary-btn"
+   onclick="event.preventDefault(); if (window.OpenBox && OpenBox.Auth) { OpenBox.Auth.signup(); } else { alert('App not loaded — check console (F12)'); }">Create Account</a>
         </div>
     </div>
 
