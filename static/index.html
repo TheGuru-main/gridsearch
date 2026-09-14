@@ -5,6 +5,32 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>OpenBox</title>
     <link rel="stylesheet" href="style.css">
+    <style>
+        /* Small additions for field labels and hints (safe to leave here) */
+        .field-label {
+            display: block;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #333;
+            margin-top: 0.6rem;
+            margin-bottom: 0.25rem;
+            text-align: left;
+        }
+        .field-hint {
+            display: block;
+            font-size: 0.72rem;
+            color: #666;
+            margin-top: -0.35rem;
+            margin-bottom: 0.55rem;
+            text-align: left;
+        }
+        .field-hint.req { color: #b45309; }
+        .field-group { margin-bottom: 0.3rem; }
+        .auth-pane input,
+        .auth-pane select {
+            margin-top: 0.15rem;
+        }
+    </style>
 </head>
 <body>
 <div id="app">
@@ -19,43 +45,89 @@
             <a href="#" class="auth-tab active" data-auth-tab="login">Login</a>
             <a href="#" class="auth-tab" data-auth-tab="signup">Sign Up</a>
         </div>
+
+        <!-- LOGIN -->
         <div id="loginPane" class="auth-pane active">
-            <input id="loginPhone" placeholder="Phone (UID)">
-            <input id="loginPassword" type="password" placeholder="Password">
-            <a href="#" id="btnLogin" class="primary-btn">Login</a>
-        </div>
-        <div id="signupPane" class="auth-pane">
-            <input id="signupName" placeholder="Full name">
-            <div class="phone-group">
-                <input id="signupDial" class="dial-input" readonly placeholder="+234">
-                <input id="signupPhone" placeholder="Phone (without leading zero)">
+            <div class="field-group">
+                <label class="field-label" for="loginPhone">Phone (UID)</label>
+                <input id="loginPhone" placeholder="e.g. 23481234567">
             </div>
-            <select id="signupCountry">
-                <option value="">Select country</option>
-                <option value="NG">Nigeria (+234, 10 digits)</option>
-                <option value="GH">Ghana (+233, 9 digits)</option>
-                <option value="US">United States (+1, 10 digits)</option>
-                <option value="IN">India (+91, 10 digits)</option>
-                <option value="GB">United Kingdom (+44, 10 digits)</option>
-            </select>
-            <input id="signupEmail" type="email" placeholder="Email">
-            <input id="signupPassword" type="password" placeholder="Password">
-            <input id="signupDob" type="date">
-            <select id="signupTalent">
-                <option value="">Select talent</option>
-                <option value="Developer">Developer</option>
-                <option value="Designer">Designer</option>
-                <option value="Video Creator">Video Creator</option>
-                <option value="Musician">Musician</option>
-                <option value="Gamer">Gamer</option>
-                <option value="Writer">Writer</option>
-            </select>
+            <div class="field-group">
+                <label class="field-label" for="loginPassword">Password</label>
+                <input id="loginPassword" type="password" placeholder="Your password">
+            </div>
+            <a href="#" id="btnLogin" class="primary-btn"
+               onclick="event.preventDefault(); OpenBox.Auth.login();">Login</a>
+        </div>
+
+        <!-- SIGNUP -->
+        <div id="signupPane" class="auth-pane">
+
+            <div class="field-group">
+                <label class="field-label" for="signupName">Full Name</label>
+                <input id="signupName" placeholder="e.g. Jane Doe">
+            </div>
+
+            <div class="field-group">
+                <label class="field-label" for="signupCountry">Country</label>
+                <select id="signupCountry">
+                    <option value="">Select country</option>
+                    <option value="NG">Nigeria (+234, 10 digits)</option>
+                    <option value="GH">Ghana (+233, 9 digits)</option>
+                    <option value="US">United States (+1, 10 digits)</option>
+                    <option value="IN">India (+91, 10 digits)</option>
+                    <option value="GB">United Kingdom (+44, 10 digits)</option>
+                </select>
+                <small class="field-hint">Select your country to auto-fill the dial code</small>
+            </div>
+
+            <div class="field-group">
+                <label class="field-label" for="signupPhone">Phone Number (UID)</label>
+                <div class="phone-group">
+                    <input id="signupDial" class="dial-input" readonly placeholder="+234">
+                    <input id="signupPhone" placeholder="Phone without leading zero">
+                </div>
+                <small class="field-hint">Digits only. No leading zero. Must match your country's length.</small>
+            </div>
+
+            <div class="field-group">
+                <label class="field-label" for="signupEmail">Email</label>
+                <input id="signupEmail" type="email" placeholder="you@example.com">
+            </div>
+
+            <div class="field-group">
+                <label class="field-label" for="signupPassword">Password</label>
+                <input id="signupPassword" type="password" placeholder="Create a password">
+            </div>
+
+            <div class="field-group">
+                <label class="field-label" for="signupDob">Date of Birth</label>
+                <input id="signupDob" type="date" aria-label="Date of Birth">
+                <small class="field-hint req">You must be at least 16 years old</small>
+            </div>
+
+            <div class="field-group">
+                <label class="field-label" for="signupTalent">Talent</label>
+                <select id="signupTalent">
+                    <option value="">Select talent</option>
+                    <option value="Developer">Developer</option>
+                    <option value="Designer">Designer</option>
+                    <option value="Video Creator">Video Creator</option>
+                    <option value="Musician">Musician</option>
+                    <option value="Gamer">Gamer</option>
+                    <option value="Writer">Writer</option>
+                </select>
+            </div>
+
             <label class="checkbox">
                 <input type="checkbox" id="communityRules">
                 I agree to the <a href="#" data-action="show-rules">Community Rules</a>
             </label>
+
             <div class="welcome-note">🎁 New accounts receive <strong>1,070 byflints</strong></div>
-            <a href="#" id="btnSignup" class="primary-btn">Create Account</a>
+
+            <a href="#" id="btnSignup" class="primary-btn"
+               onclick="event.preventDefault(); OpenBox.Auth.signup();">Create Account</a>
         </div>
     </div>
 
