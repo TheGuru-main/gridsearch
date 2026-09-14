@@ -533,4 +533,15 @@ async def health():
     return {"ok": True, "gameweek": current_gameweek()}
 
 
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
+from pathlib import Path
+
+BACKEND_DIR = Path(__file__).resolve().parent
+ROOT_DIR    = BACKEND_DIR.parent
+STATIC_DIR  = ROOT_DIR / "static"
+STORAGE_DIR = BACKEND_DIR / "storage"
+UPLOAD_DIR  = STORAGE_DIR / "uploads"
+
+STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
