@@ -22,6 +22,7 @@
             if (workspace === 'workspaceMessages') OpenBox.Messages.show();
             if (workspace === 'workspaceWallet') OpenBox.Wallet.show();
             if (workspace === 'workspaceFantasy') OpenBox.Fantasy.show();
+            if (workspace === 'workspaceNews') OpenBox.News.show();
             return;
         }
 
