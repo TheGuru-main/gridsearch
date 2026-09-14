@@ -93,6 +93,29 @@
 
         .welcome-note { font-size: 0.8rem; letter-spacing: 0.02em; }
     </style>
+<script>
+/* ═══════════════════════════════════════════════
+   BOOTSTRAP — guarantee the OpenBox namespace
+   exists before any module script loads.
+   ═══════════════════════════════════════════════ */
+window.OpenBox = window.OpenBox || {};
+window.OpenBox.CONFIG    = window.OpenBox.CONFIG    || {};
+window.OpenBox.App       = window.OpenBox.App       || {
+    currentUser: null,
+    currentCategory: 'app',
+    currentGroupId: null
+};
+window.OpenBox.API       = window.OpenBox.API       || {};
+window.OpenBox.Auth      = window.OpenBox.Auth      || {};
+window.OpenBox.Wallet    = window.OpenBox.Wallet    || {};
+window.OpenBox.Files     = window.OpenBox.Files     || {};
+window.OpenBox.Messages  = window.OpenBox.Messages  || {};
+window.OpenBox.Groups    = window.OpenBox.Groups    || {};
+window.OpenBox.Fantasy   = window.OpenBox.Fantasy   || {};
+window.OpenBox.UI        = window.OpenBox.UI        || {};
+window.OpenBox.GSP       = window.OpenBox.GSP       || {};
+window.OpenBox.Storage   = window.OpenBox.Storage   || {};
+</script>
 </head>
 <body>
 <div id="app">
