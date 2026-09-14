@@ -1,4 +1,4 @@
-i/**
+/**
  * Fantasy Registry — tournaments as grids, clubs as columns.
  */
 
@@ -273,7 +273,176 @@ OpenBox.FantasyRegistry = {
           { name: "Karim Aribi", pos: "FWD" }, { name: "Lamine Abid", pos: "FWD" },
           { name: "Bouly Junior Sambou", pos: "FWD" }, { name: "Ahmed Kendouci", pos: "FWD" },
         ]},
-                  { id: "mca", name: "MC Alger", players: [
+                          { id: "mca", name: "MC Alger", players: [
           { name: "Oussama Benbot", pos: "GK" }, { name: "Farid Chaal", pos: "GK" },
           { name: "Ayoub Abdellaoui", pos: "DEF" }, { name: "Mohamed Azzi", pos: "DEF" },
-          { name: "Réda Halaïmia", pos: "
+          { name: "Réda Halaïmia", pos: "DEF" }, { name: "Miloud Rebiai", pos: "DEF" },
+          { name: "Sofiane Bendebka", pos: "MID" }, { name: "Zakaria Draoui", pos: "MID" },
+          { name: "Ali Haroun", pos: "MID" }, { name: "Youcef Belaili", pos: "MID" },
+          { name: "Andy Delort", pos: "FWD" }, { name: "Bilal Brahimi", pos: "FWD" },
+          { name: "Mohamed Bangoura", pos: "FWD" }, { name: "Zakaria Naidji", pos: "FWD" },
+        ]},
+      ],
+    },
+
+    cafcc: {
+      id: "cafcc", name: "CAF Confederation Cup", region: "Africa", type: "continental", cols: 48, rows: 100,
+      clubs: [
+        { id: "ahl", name: "Al Ahly", players: [
+          { name: "Mohamed El Shenawy", pos: "GK" }, { name: "Mohamed Seha", pos: "GK" },
+          { name: "Karim Fouad", pos: "DEF" }, { name: "Yasser Ibrahim", pos: "DEF" },
+          { name: "Achraf Dari", pos: "DEF" }, { name: "Yassin Marei", pos: "DEF" },
+          { name: "Akram Tawfik", pos: "MID" }, { name: "Ahmed Eid", pos: "MID" },
+          { name: "Emam Ashour", pos: "MID" }, { name: "Mohamed Magdy Afsha", pos: "MID" },
+          { name: "Hussein El Shahat", pos: "FWD" }, { name: "Marwan Otaka", pos: "FWD" },
+          { name: "Taher Mohamed Taher", pos: "FWD" }, { name: "Ahmed Abdel Kader", pos: "FWD" },
+        ]},
+        { id: "zed", name: "ZED FC", players: [
+          { name: "Mohamed Sobhi", pos: "GK" }, { name: "Ali Lotfi", pos: "GK" },
+          { name: "Mohamed Ismail", pos: "DEF" }, { name: "Ahmed Ayman", pos: "DEF" },
+          { name: "Mostafa El Aash", pos: "DEF" }, { name: "Ali Elfil", pos: "DEF" },
+          { name: "Ahmed Adel", pos: "MID" }, { name: "Mostafa Saad", pos: "MID" },
+          { name: "Mahmoud Bolbol", pos: "MID" }, { name: "Rasheed Ahmed", pos: "MID" },
+          { name: "Shady Hussein", pos: "FWD" }, { name: "Dilson", pos: "FWD" },
+          { name: "Moustafa Ziko", pos: "FWD" }, { name: "Amr El Sisi", pos: "FWD" },
+        ]},
+        { id: "rsb", name: "Renaissance Berkane", players: [
+          { name: "Hamza Hamiani", pos: "GK" }, { name: "Amine El Ouaad", pos: "GK" },
+          { name: "Issoufou Dayo", pos: "DEF" }, { name: "Adil Tahif", pos: "DEF" },
+          { name: "Hamza Regragui", pos: "DEF" }, { name: "Yassine Labhiri", pos: "DEF" },
+          { name: "Larbi Naji", pos: "MID" }, { name: "Mohamed El Mourabit", pos: "MID" },
+          { name: "Bilal El Ouadghiri", pos: "MID" }, { name: "Mateus Criciúma", pos: "MID" },
+          { name: "Youssef Zghoudi", pos: "FWD" }, { name: "Chadrack Lukombe", pos: "FWD" },
+          { name: "Ayoub Khairi", pos: "FWD" }, { name: "Paul Bassène", pos: "FWD" },
+        ]},
+      ],
+    },
+
+    egypt_pl: {
+      id: "egypt_pl", name: "Egyptian Premier League", region: "Africa", type: "domestic", cols: 30, rows: 100,
+      clubs: [
+        { id: "zam", name: "Zamalek", players: [
+          { name: "Mohamed Awad", pos: "GK" }, { name: "Mahmoud El Zanfaly", pos: "GK" },
+          { name: "Omar Gaber", pos: "DEF" }, { name: "Mahmoud Hamdy El Wensh", pos: "DEF" },
+          { name: "Hussein El Sayed", pos: "DEF" }, { name: "Ahmed Fatouh", pos: "DEF" },
+          { name: "Nabil Emad Donga", pos: "MID" }, { name: "Mohamed Shehata", pos: "MID" },
+          { name: "Youssef Obama", pos: "MID" }, { name: "Ahmed Sayed Zizo", pos: "MID" },
+          { name: "Mostafa Shalaby", pos: "FWD" }, { name: "Nasser Mansi", pos: "FWD" },
+          { name: "Seif El Jaziri", pos: "FWD" }, { name: "Shikabala", pos: "FWD" },
+        ]},
+        { id: "pyr", name: "Pyramids FC", players: [
+          { name: "Ahmed El Shenawy", pos: "GK" }, { name: "Sherif Ekramy", pos: "GK" },
+          { name: "Ali Gabr", pos: "DEF" }, { name: "Ahmed Samy", pos: "DEF" },
+          { name: "Mohamed Hamdy", pos: "DEF" }, { name: "Osama Galal", pos: "DEF" },
+          { name: "Mohamed El Chibi", pos: "MID" }, { name: "Walid El Karti", pos: "MID" },
+          { name: "Mostafa Fathi", pos: "MID" }, { name: "Ibrahim Adel", pos: "MID" },
+          { name: "Fiston Mayele", pos: "FWD" }, { name: "Marwan Hamdy", pos: "FWD" },
+          { name: "Dodo", pos: "FWD" }, { name: "Youssef Obama", pos: "FWD" },
+        ]},
+        { id: "ahl", name: "Al Ahly", players: [
+          { name: "Mohamed El Shenawy", pos: "GK" }, { name: "Mohamed Seha", pos: "GK" },
+          { name: "Karim Fouad", pos: "DEF" }, { name: "Yasser Ibrahim", pos: "DEF" },
+          { name: "Achraf Dari", pos: "DEF" }, { name: "Yassin Marei", pos: "DEF" },
+          { name: "Akram Tawfik", pos: "MID" }, { name: "Ahmed Eid", pos: "MID" },
+          { name: "Emam Ashour", pos: "MID" }, { name: "Mohamed Magdy Afsha", pos: "MID" },
+          { name: "Hussein El Shahat", pos: "FWD" }, { name: "Marwan Otaka", pos: "FWD" },
+          { name: "Taher Mohamed Taher", pos: "FWD" }, { name: "Ahmed Abdel Kader", pos: "FWD" },
+        ]},
+        { id: "masry", name: "Al Masry", players: [
+          { name: "Essam Tharwat", pos: "GK" }, { name: "Mahmoud Gad", pos: "GK" },
+          { name: "Ahmed Alaa", pos: "DEF" }, { name: "Baher El Mohamady", pos: "DEF" },
+          { name: "Amr Moussa", pos: "DEF" }, { name: "Karim El Eraki", pos: "DEF" },
+          { name: "Mido Gaber", pos: "MID" }, { name: "Youssef El Gohary", pos: "MID" },
+          { name: "Salah Mohsen", pos: "MID" }, { name: "Ahmed Refaat", pos: "MID" },
+          { name: "Fakhreddine Ben Youssef", pos: "FWD" }, { name: "Salah Ashour", pos: "FWD" },
+          { name: "Karim Bambo", pos: "FWD" }, { name: "Hussein Ragab", pos: "FWD" },
+        ]},
+      ],
+    },
+
+    sa_psl: {
+      id: "sa_psl", name: "South African Premier Division", region: "Africa", type: "domestic", cols: 30, rows: 100,
+      clubs: [
+        { id: "msu", name: "Mamelodi Sundowns", players: [
+          { name: "Ronwen Williams", pos: "GK" }, { name: "Denis Onyango", pos: "GK" },
+          { name: "Khuliso Mudau", pos: "DEF" }, { name: "Mothobi Mvala", pos: "DEF" },
+          { name: "Grant Kekana", pos: "DEF" }, { name: "Aubrey Modiba", pos: "DEF" },
+          { name: "Teboho Mokoena", pos: "MID" }, { name: "Themba Zwane", pos: "MID" },
+          { name: "Marcelo Allende", pos: "MID" }, { name: "Neo Maema", pos: "MID" },
+          { name: "Peter Shalulile", pos: "FWD" }, { name: "Lucas Ribeiro", pos: "FWD" },
+          { name: "Iqraam Rayners", pos: "FWD" }, { name: "Rivaldo Coetzee", pos: "FWD" },
+        ]},
+        { id: "orl", name: "Orlando Pirates", players: [
+          { name: "Sipho Chaine", pos: "GK" }, { name: "Melusi Buthelezi", pos: "GK" },
+          { name: "Innocent Maela", pos: "DEF" }, { name: "Tapelo Xoki", pos: "DEF" },
+          { name: "Nkosinathi Sibisi", pos: "DEF" }, { name: "Thabiso Monyane", pos: "DEF" },
+          { name: "Makhehlene Makhaula", pos: "MID" }, { name: "Patrick Maswanganyi", pos: "MID" },
+          { name: "Themba Zwane", pos: "MID" }, { name: "Relebohile Mofokeng", pos: "MID" },
+          { name: "Tshegofatso Mabasa", pos: "FWD" }, { name: "Evidence Makgopa", pos: "FWD" },
+          { name: "Iqraam Rayners", pos: "FWD" }, { name: "Zakhele Lepasa", pos: "FWD" },
+        ]},
+      ],
+    },
+
+    botola: {
+      id: "botola", name: "Botola Pro", region: "Africa", type: "domestic", cols: 30, rows: 100,
+      clubs: [
+        { id: "wyd", name: "Wydad Casablanca", players: [
+          { name: "Ahmed Reda Tagnaouti", pos: "GK" }, { name: "Youssef El Motie", pos: "GK" },
+          { name: "Yahya Attiyat Allah", pos: "DEF" }, { name: "Amine Farhane", pos: "DEF" },
+          { name: "Cheick Comara", pos: "DEF" }, { name: "Ayoub El Amloud", pos: "DEF" },
+          { name: "Yahya Jabrane", pos: "MID" }, { name: "Ismail Haddad", pos: "MID" },
+          { name: "Oussama Falouh", pos: "MID" }, { name: "Zakaria Draoui", pos: "MID" },
+          { name: "Ayoub El Kaabi", pos: "FWD" }, { name: "Badie Aouk", pos: "FWD" },
+          { name: "Mounir El Haddadi", pos: "FWD" }, { name: "Zouhair El Moutaraji", pos: "FWD" },
+        ]},
+        { id: "raja", name: "Raja Casablanca", players: [
+          { name: "Anas Zniti", pos: "GK" }, { name: "Marouane Fakhr", pos: "GK" },
+          { name: "Abdellah Khafifi", pos: "DEF" }, { name: "Marouane Hadhoudi", pos: "DEF" },
+          { name: "Omar Boutayeb", pos: "DEF" }, { name: "Abdeljalil Jbira", pos: "DEF" },
+          { name: "Mohamed Zrida", pos: "MID" }, { name: "Zakaria El Wardi", pos: "MID" },
+          { name: "Mohamed Azrida", pos: "MID" }, { name: "Yousri Bouzok", pos: "MID" },
+          { name: "Yousra Ben Guitoun", pos: "FWD" }, { name: "Hamza Khabba", pos: "FWD" },
+          { name: "Adam Ennafati", pos: "FWD" }, { name: "Nahiri", pos: "FWD" },
+        ]},
+      ],
+    },
+  },
+};
+
+// ═══════════════════════════════════════════════════════
+//  HELPERS
+// ═══════════════════════════════════════════════════════
+OpenBox.FantasyRegistry.listTournaments = function () {
+  return Object.values(OpenBox.FantasyRegistry.tournaments).map(t => ({
+    id: t.id, name: t.name, region: t.region, type: t.type,
+    club_count: t.clubs.length, cols: t.cols, rows: t.rows,
+  }));
+};
+
+OpenBox.FantasyRegistry.getTournament = function (id) {
+  const t = OpenBox.FantasyRegistry.tournaments[id];
+  if (!t) return null;
+  return { ...t, clubs: t.clubs.map((c, col) => ({ ...c, col })) };
+};
+
+OpenBox.FantasyRegistry.playersForClub = function (tournamentId, clubId) {
+  const t = OpenBox.FantasyRegistry.tournaments[tournamentId];
+  if (!t) return [];
+  const club = t.clubs.find(c => c.id === clubId);
+  if (!club) return [];
+  return club.players.map((p, i) => ({
+    id: `${tournamentId}:${clubId}:${i}`,
+    name: p.name,
+    position: p.pos,
+    club_id: clubId,
+    tournament_id: tournamentId,
+    price: priceFor(p),
+  }));
+};
+
+function priceFor(p) {
+  const base = { GK: 50, DEF: 70, MID: 90, FWD: 110 }[p.pos] || 50;
+  const hash = (p.name || "").split("").reduce((s, c) => s + c.charCodeAt(0), 0);
+  return Math.min(500, base + (hash % 80));
+} 
