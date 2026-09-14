@@ -556,49 +556,6 @@ def sp_sync(request: Request, league: str = "epl"):
 # ═══════════════════════════════════════════════════════
 #  MULTI-SOURCE SCRAPER ADMIN
 # ═══════════════════════════════════════════════════════
-# ─── TheSportsDB ───
-TSDB_BASE = "https://www.thesportsdb.com/api/v1/json/3"
-
-@app.get("/api/admin/tsdb-test")
-def tsdb_test(request: Request):
-    if request.query_params.get("token", "") != SCRAPER_TOKEN:
-        raise HTTPException(403)
-    with httpx.Client(timeout=15) as c:
-        r = c.get(f"{TSDB_BASE}/all_leagues.php")
-    try:
-        data = r.json()
-        return {"status": r.status_code, "leagues_count": len(data.get("leagues") or [])}
-    except Exception:
-        return {"status": r.status_code, "raw": r.text[:300]}
-
-@app.get("/api/admin/tsdb-preview")
-def tsdb_preview(request: Request):
-    if request.query_params.get("token", "") != SCRAPER_TOKEN:
-        raise HTTPException(403)
-    league = request.query_params.get("league", "English Premier League")
-    with httpx.Client(timeout=20) as c:
-        r = c.get(f"{TSDB_BASE}/search_all_teams.php", params={"l": league})
-    try:
-        data = r.json()
-        teams = data.get("teams") or []
-        return {"status": r.status_code, "count": len(teams),
-                "teams": [{"id": t.get("idTeam"), "name": t.get("strTeam"),
-                           "stadium": t.get("strStadium")} for t in teams[:25]]}
-    except Exception:
-        return {"status": r.status_code, "raw": r.text[:300]}
-
-@app.get("/api/admin/tsdb-sync")
-def tsdb_sync(request: Request):
-    if request.query_params.get("token", "") != SCRAPER_TOKEN:
-        raise HTTPException(403)
-    league = request.query_params.get("league", "English Premier League")
-    from tsdb_sync import sync_league
-    try:
-        return sync_league(league)
-    except Exception as e:
-        import traceback
-        return {"ok": False, "error": str(e), "traceback": traceback.format_exc()}
-
 # ─── Bzzoiro ───
 BZZ_BASE = "https://sports.bzzoiro.com/api/v2"
 
