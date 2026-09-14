@@ -23,7 +23,7 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 # ═══════════════════════════════════════════════════════
 #  CONFIG
 # ═══════════════════════════════════════════════════════
-WELCOME_BYFLINTS = 1070
+WELCOME_BYFLINTS = 1_070
 
 # Minimum byflints per player, per tournament tier
 TOURNAMENT_BASE = {
