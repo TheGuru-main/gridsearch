@@ -7,7 +7,25 @@
         GB: { dial: '44',  len: 10, dialDisplay: '+44' }
     };
 
+    function requireDeps() {
+        const missing = [];
+        if (!window.OpenBox) missing.push('OpenBox');
+        if (!window.OpenBox?.API) missing.push('OpenBox.API');
+        if (!window.OpenBox?.API?.signup) missing.push('OpenBox.API.signup');
+        if (!window.OpenBox?.App) missing.push('OpenBox.App');
+        if (!window.OpenBox?.App?.afterLogin) missing.push('OpenBox.App.afterLogin');
+        return missing;
+    }
+
     async function signup() {
+        console.log('[auth] signup() invoked');
+
+        const missing = requireDeps();
+        if (missing.length) {
+            console.error('[auth] missing dependencies:', missing);
+            return alert('App not fully loaded. Missing: ' + missing.join(', '));
+        }
+
         const name = document.getElementById('signupName').value.trim();
         const phone = document.getElementById('signupPhone').value.trim();
         const email = document.getElementById('signupEmail').value.trim();
@@ -30,39 +48,63 @@
         const age = Math.floor((Date.now() - new Date(dob).getTime()) / (1000*60*60*24*365.25));
         if (age < 16) return alert('You must be 16 or older');
 
-        const r = await OpenBox.API.signup({
-            full_name: name, phone: fullPhone, email,
-            password, dob, talent, country
-        });
-        if (!r.ok) return alert(r.data.detail || r.data.error || 'Signup failed');
+        try {
+            const r = await OpenBox.API.signup({
+                full_name: name, phone: fullPhone, email,
+                password, dob, talent, country
+            });
+            console.log('[auth] signup response:', r);
 
-        OpenBox.App.currentUser = {
-            phone: r.data.phone,
-            fullName: r.data.full_name,
-            byflints: r.data.byflints
-        };
-        await OpenBox.App.afterLogin();
-        alert(`Welcome! You received ${r.data.byflints} byflints.`);
+            if (!r.ok) {
+                return alert(r.data?.detail || r.data?.error || 'Signup failed');
+            }
+
+            OpenBox.App.currentUser = {
+                phone: r.data.phone,
+                fullName: r.data.full_name,
+                byflints: r.data.byflints
+            };
+            await OpenBox.App.afterLogin();
+            alert(`Welcome! You received ${r.data.byflints} byflints.`);
+        } catch (err) {
+            console.error('[auth] signup threw:', err);
+            alert('Signup error: ' + err.message);
+        }
     }
 
     async function login() {
+        console.log('[auth] login() invoked');
+
+        const missing = requireDeps();
+        if (missing.length) {
+            console.error('[auth] missing dependencies:', missing);
+            return alert('App not fully loaded. Missing: ' + missing.join(', '));
+        }
+
         const phone = document.getElementById('loginPhone').value.trim();
         const password = document.getElementById('loginPassword').value;
         if (!phone || !password) return alert('All fields required');
 
-        const r = await OpenBox.API.login({ phone, password });
-        if (!r.ok) return alert(r.data.detail || 'Invalid credentials');
+        try {
+            const r = await OpenBox.API.login({ phone, password });
+            console.log('[auth] login response:', r);
 
-        OpenBox.App.currentUser = {
-            phone: r.data.phone,
-            fullName: r.data.full_name,
-            byflints: r.data.byflints
-        };
-        await OpenBox.App.afterLogin();
+            if (!r.ok) return alert(r.data?.detail || 'Invalid credentials');
+
+            OpenBox.App.currentUser = {
+                phone: r.data.phone,
+                fullName: r.data.full_name,
+                byflints: r.data.byflints
+            };
+            await OpenBox.App.afterLogin();
+        } catch (err) {
+            console.error('[auth] login threw:', err);
+            alert('Login error: ' + err.message);
+        }
     }
 
     async function logout() {
-        await OpenBox.API.logout();
+        try { await OpenBox.API.logout(); } catch (_) {}
         OpenBox.App.currentUser = null;
         OpenBox.UI.showWorkspace('authScreen');
     }
