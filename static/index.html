@@ -4,9 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>🏆 GlobalSoccerFantasy — OpenBox</title>
+
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="style.css">
+
     <style>
-        /* ─── Monospace everything ─── */
         :root {
             --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Menlo', 'Consolas', 'Liberation Mono', monospace;
             --gold: #ffd700;
@@ -17,7 +20,6 @@
             font-family: var(--font-mono) !important;
         }
 
-        /* ─── Global header brand ─── */
         .brand {
             display: flex;
             align-items: center;
@@ -42,7 +44,6 @@
             margin-bottom: 1rem;
         }
 
-        /* ─── Field labels + hints ─── */
         .field-label {
             display: block;
             font-size: 0.8rem;
@@ -66,7 +67,6 @@
         .auth-pane input,
         .auth-pane select { margin-top: 0.15rem; }
 
-        /* ─── Headers ─── */
         .top-header h1,
         .msg-header h2,
         h2.section-title {
@@ -78,7 +78,6 @@
             background-clip: text;
         }
 
-        /* ─── Workspace headers ─── */
         .workspace > h2 {
             font-size: 1.2rem;
             font-weight: 800;
@@ -92,30 +91,60 @@
         }
 
         .welcome-note { font-size: 0.8rem; letter-spacing: 0.02em; }
+
+        /* FA icon sizing */
+        .bottom-nav .nav-link {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 3px;
+            padding: 6px 0;
+            font-size: 0.62rem;
+            letter-spacing: 0.03em;
+        }
+        .bottom-nav .nav-link i {
+            font-size: 1.1rem;
+            line-height: 1;
+        }
+        .bottom-nav .nav-link.active i { color: #ffd700; }
+        .bottom-nav .nav-link.active span { color: #fff; font-weight: 700; }
+        .auth-tab i,
+        .cat-tab i,
+        .ftab i {
+            margin-right: 6px;
+            font-size: 0.85em;
+        }
+        .primary-btn i,
+        .secondary-btn i { margin-right: 6px; }
+        .icon-btn i { font-size: 1.2rem; }
     </style>
-<script>
-/* ═══════════════════════════════════════════════
-   BOOTSTRAP — guarantee the OpenBox namespace
-   exists before any module script loads.
-   ═══════════════════════════════════════════════ */
-window.OpenBox = window.OpenBox || {};
-window.OpenBox.CONFIG    = window.OpenBox.CONFIG    || {};
-window.OpenBox.App       = window.OpenBox.App       || {
-    currentUser: null,
-    currentCategory: 'app',
-    currentGroupId: null
-};
-window.OpenBox.API       = window.OpenBox.API       || {};
-window.OpenBox.Auth      = window.OpenBox.Auth      || {};
-window.OpenBox.Wallet    = window.OpenBox.Wallet    || {};
-window.OpenBox.Files     = window.OpenBox.Files     || {};
-window.OpenBox.Messages  = window.OpenBox.Messages  || {};
-window.OpenBox.Groups    = window.OpenBox.Groups    || {};
-window.OpenBox.Fantasy   = window.OpenBox.Fantasy   || {};
-window.OpenBox.UI        = window.OpenBox.UI        || {};
-window.OpenBox.GSP       = window.OpenBox.GSP       || {};
-window.OpenBox.Storage   = window.OpenBox.Storage   || {};
-</script>
+
+    <script>
+    /* ═══════════════════════════════════════════════
+       BOOTSTRAP — guarantee the OpenBox namespace
+       exists before any module script loads.
+       ═══════════════════════════════════════════════ */
+    window.OpenBox = window.OpenBox || {};
+    window.OpenBox.CONFIG    = window.OpenBox.CONFIG    || {};
+    window.OpenBox.App       = window.OpenBox.App       || {
+        currentUser: null,
+        currentCategory: 'app',
+        currentGroupId: null
+    };
+    window.OpenBox.API       = window.OpenBox.API       || {};
+    window.OpenBox.Auth      = window.OpenBox.Auth      || {};
+    window.OpenBox.Wallet    = window.OpenBox.Wallet    || {};
+    window.OpenBox.Files     = window.OpenBox.Files     || {};
+    window.OpenBox.Messages  = window.OpenBox.Messages  || {};
+    window.OpenBox.Groups    = window.OpenBox.Groups    || {};
+    window.OpenBox.Fantasy   = window.OpenBox.Fantasy   || {};
+    window.OpenBox.News      = window.OpenBox.News      || {};
+    window.OpenBox.UI        = window.OpenBox.UI        || {};
+    window.OpenBox.GSP       = window.OpenBox.GSP       || {};
+    window.OpenBox.Storage   = window.OpenBox.Storage   || {};
+    window.OpenBox.FantasyRegistry = window.OpenBox.FantasyRegistry || { tournaments: {} };
+    </script>
 </head>
 <body>
 <div id="app">
@@ -128,8 +157,8 @@ window.OpenBox.Storage   = window.OpenBox.Storage   || {};
         <div class="brand-sub">OpenBox · Open Market · Fantasy</div>
 
         <div class="auth-tabs">
-            <a href="#" class="auth-tab active" data-auth-tab="login">Login</a>
-            <a href="#" class="auth-tab" data-auth-tab="signup">Sign Up</a>
+            <a href="#" class="auth-tab active" data-auth-tab="login"><i class="fa-solid fa-right-to-bracket"></i> Login</a>
+            <a href="#" class="auth-tab" data-auth-tab="signup"><i class="fa-solid fa-user-plus"></i> Sign Up</a>
         </div>
 
         <!-- LOGIN -->
@@ -143,7 +172,9 @@ window.OpenBox.Storage   = window.OpenBox.Storage   || {};
                 <input id="loginPassword" type="password" placeholder="Your password" autocomplete="current-password">
             </div>
             <a href="#" id="btnLogin" class="primary-btn"
-   onclick="event.preventDefault(); if (window.OpenBox && OpenBox.Auth) { OpenBox.Auth.login(); } else { alert('App not loaded — check console (F12)'); }">Login</a>
+               onclick="event.preventDefault(); if (window.OpenBox && OpenBox.Auth) { OpenBox.Auth.login(); } else { alert('App not loaded — check console'); }">
+                <i class="fa-solid fa-right-to-bracket"></i> Login
+            </a>
         </div>
 
         <!-- SIGNUP -->
@@ -212,8 +243,10 @@ window.OpenBox.Storage   = window.OpenBox.Storage   || {};
 
             <div class="welcome-note">🎁 New accounts receive <strong>1,070 byflints</strong></div>
 
-           <a href="#" id="btnSignup" class="primary-btn"
-   onclick="event.preventDefault(); if (window.OpenBox && OpenBox.Auth) { OpenBox.Auth.signup(); } else { alert('App not loaded — check console (F12)'); }">Create Account</a>
+            <a href="#" id="btnSignup" class="primary-btn"
+               onclick="event.preventDefault(); if (window.OpenBox && OpenBox.Auth) { OpenBox.Auth.signup(); } else { alert('App not loaded — check console'); }">
+                <i class="fa-solid fa-user-plus"></i> Create Account
+            </a>
         </div>
     </div>
 
@@ -224,19 +257,19 @@ window.OpenBox.Storage   = window.OpenBox.Storage   || {};
         <header class="top-header">
             <h1 class="brand brand-lg">🏆 GlobalSoccerFantasy</h1>
             <div class="header-actions">
-                <a href="#" id="btnRefresh" class="icon-btn">🔄</a>
-                <a href="#" id="btnLogout" class="icon-btn">🚪</a>
+                <a href="#" id="btnRefresh" class="icon-btn"><i class="fa-solid fa-rotate"></i></a>
+                <a href="#" id="btnLogout" class="icon-btn"><i class="fa-solid fa-right-from-bracket"></i></a>
             </div>
         </header>
         <div class="search-box">
             <input type="text" id="searchQuery" placeholder="Search files...">
-            <a href="#" id="btnSearch" class="search-btn">🔍</a>
+            <a href="#" id="btnSearch" class="search-btn"><i class="fa-solid fa-magnifying-glass"></i></a>
         </div>
         <div class="category-tabs">
-            <a href="#" class="cat-tab active" data-category="app">Apps</a>
-            <a href="#" class="cat-tab" data-category="game">Games</a>
-            <a href="#" class="cat-tab" data-category="video">Videos</a>
-            <a href="#" class="cat-tab" data-category="other">Other</a>
+            <a href="#" class="cat-tab active" data-category="app"><i class="fa-solid fa-mobile-screen-button"></i> Apps</a>
+            <a href="#" class="cat-tab" data-category="game"><i class="fa-solid fa-gamepad"></i> Games</a>
+            <a href="#" class="cat-tab" data-category="video"><i class="fa-solid fa-video"></i> Videos</a>
+            <a href="#" class="cat-tab" data-category="other"><i class="fa-solid fa-file"></i> Other</a>
         </div>
         <div id="categoryGrid" class="grid-container"></div>
         <div id="searchResults" style="display:none;"></div>
@@ -246,10 +279,10 @@ window.OpenBox.Storage   = window.OpenBox.Storage   || {};
     <!--  MY HOME — Groups                                -->
     <!-- ═══════════════════════════════════════════════ -->
     <div id="workspaceMyHome" class="workspace">
-        <h2>🏠 My Home</h2>
-        <a href="#" id="btnCreateGroup" class="primary-btn">➕ Create Group</a>
+        <h2><i class="fa-solid fa-users"></i> My Home</h2>
+        <a href="#" id="btnCreateGroup" class="primary-btn"><i class="fa-solid fa-plus"></i> Create Group</a>
         <input id="inviteCodeInput" placeholder="Enter invite code">
-        <a href="#" id="btnJoinGroup" class="secondary-btn">Join Group</a>
+        <a href="#" id="btnJoinGroup" class="secondary-btn"><i class="fa-solid fa-door-open"></i> Join Group</a>
         <div id="groupsList" class="group-list"></div>
     </div>
 
@@ -258,7 +291,7 @@ window.OpenBox.Storage   = window.OpenBox.Storage   || {};
     <!-- ═══════════════════════════════════════════════ -->
     <div id="workspaceGroupDetail" class="workspace">
         <div class="top-header">
-            <a href="#" id="btnCloseGroupDetail" class="secondary-btn">← Back</a>
+            <a href="#" id="btnCloseGroupDetail" class="secondary-btn"><i class="fa-solid fa-arrow-left"></i> Back</a>
             <h2 id="groupDetailTitle">Group</h2>
         </div>
         <div id="groupDetailInfo"></div>
@@ -266,7 +299,7 @@ window.OpenBox.Storage   = window.OpenBox.Storage   || {};
         <div id="groupPostsList" class="group-posts-list"></div>
         <div class="chat-input">
             <input id="groupPostInput" placeholder="Write a post...">
-            <a href="#" id="btnAddGroupPost" class="primary-btn">Post</a>
+            <a href="#" id="btnAddGroupPost" class="primary-btn"><i class="fa-solid fa-paper-plane"></i></a>
         </div>
     </div>
 
@@ -274,7 +307,7 @@ window.OpenBox.Storage   = window.OpenBox.Storage   || {};
     <!--  UPLOAD                                          -->
     <!-- ═══════════════════════════════════════════════ -->
     <div id="workspaceUpload" class="workspace">
-        <h2>⬆️ Upload</h2>
+        <h2><i class="fa-solid fa-cloud-arrow-up"></i> Upload</h2>
         <input type="file" id="fileInput">
         <select id="uploadCategory">
             <option value="app">App (15 byflints)</option>
@@ -287,8 +320,8 @@ window.OpenBox.Storage   = window.OpenBox.Storage   || {};
         <input id="description" placeholder="Description">
         <label class="checkbox"><input type="checkbox" id="originalityAgreement"> I confirm originality</label>
         <div id="feeDisplay">Fee: 0 byflints</div>
-        <a href="#" id="btnUpload" class="primary-btn">Upload</a>
-        <a href="#" id="btnCloseUpload" class="secondary-btn">Cancel</a>
+        <a href="#" id="btnUpload" class="primary-btn"><i class="fa-solid fa-upload"></i> Upload</a>
+        <a href="#" id="btnCloseUpload" class="secondary-btn"><i class="fa-solid fa-xmark"></i> Cancel</a>
         <div id="uploadStatus"></div>
     </div>
 
@@ -297,15 +330,15 @@ window.OpenBox.Storage   = window.OpenBox.Storage   || {};
     <!-- ═══════════════════════════════════════════════ -->
     <div id="workspaceMessages" class="workspace">
         <div class="msg-header">
-            <a href="#" id="btnCloseChat" class="secondary-btn" style="display:none;">← Back</a>
-            <h2 id="chatPartner">Messages</h2>
+            <a href="#" id="btnCloseChat" class="secondary-btn" style="display:none;"><i class="fa-solid fa-arrow-left"></i> Back</a>
+            <h2 id="chatPartner"><i class="fa-solid fa-comments"></i> Messages</h2>
         </div>
         <div id="conversationList" class="conversation-list"></div>
         <div id="chatView" style="display:none; flex-direction: column; height: 70vh;">
             <div id="chatMessages" class="chat-messages"></div>
             <div class="chat-input">
                 <input id="messageInput" placeholder="Type message...">
-                <a href="#" id="btnSendMessage" class="primary-btn">Send</a>
+                <a href="#" id="btnSendMessage" class="primary-btn"><i class="fa-solid fa-paper-plane"></i></a>
             </div>
         </div>
     </div>
@@ -314,7 +347,7 @@ window.OpenBox.Storage   = window.OpenBox.Storage   || {};
     <!--  WALLET                                          -->
     <!-- ═══════════════════════════════════════════════ -->
     <div id="workspaceWallet" class="workspace">
-        <h2>👛 Byflint Wallet</h2>
+        <h2><i class="fa-solid fa-wallet"></i> Byflint Wallet</h2>
         <div class="wallet-card">
             <div>Current Balance</div>
             <div class="balance-amount" id="walletBalanceDisplay">0</div>
@@ -332,25 +365,36 @@ window.OpenBox.Storage   = window.OpenBox.Storage   || {};
     <!--  FANTASY                                         -->
     <!-- ═══════════════════════════════════════════════ -->
     <div id="workspaceFantasy" class="workspace">
-    <header class="top-header">
-        <h2 class="brand brand-lg">🏆 GlobalSoccerFantasy</h2>
-        <div class="fantasy-week" id="fantasyWeek"></div>
-    </header>
-    <div class="fantasy-tabs">
-        <a href="#" class="ftab active" data-ftab="tournaments">Tournaments</a>
-        <a href="#" class="ftab" data-ftab="hot">Hot</a>
-        <a href="#" class="ftab" data-ftab="transfers">Transfers</a>
-        <a href="#" class="ftab" data-ftab="squad">My Squad</a>
-        <a href="#" class="ftab" data-ftab="team">Team Sheet</a>
+        <header class="top-header">
+            <h2 class="brand brand-lg">🏆 GlobalSoccerFantasy</h2>
+            <div class="fantasy-week" id="fantasyWeek"></div>
+        </header>
+        <div class="fantasy-tabs">
+            <a href="#" class="ftab active" data-ftab="tournaments"><i class="fa-solid fa-trophy"></i> Tournaments</a>
+            <a href="#" class="ftab" data-ftab="hot"><i class="fa-solid fa-fire"></i> Hot</a>
+            <a href="#" class="ftab" data-ftab="transfers"><i class="fa-solid fa-right-left"></i> Transfers</a>
+            <a href="#" class="ftab" data-ftab="squad"><i class="fa-solid fa-people-group"></i> My Squad</a>
+            <a href="#" class="ftab" data-ftab="team"><i class="fa-solid fa-clipboard-list"></i> Team Sheet</a>
+        </div>
+        <div id="fantasyBody"></div>
     </div>
-    <div id="fantasyBody"></div>
-</div>
+
+    <!-- ═══════════════════════════════════════════════ -->
+    <!--  NEWS                                            -->
+    <!-- ═══════════════════════════════════════════════ -->
+    <div id="workspaceNews" class="workspace">
+        <header class="top-header">
+            <h2 class="brand brand-lg">🏆 GlobalSoccerFantasy</h2>
+            <div class="fantasy-week"><i class="fa-solid fa-newspaper"></i> News</div>
+        </header>
+        <div id="newsBody"><p class="hint">Loading...</p></div>
+    </div>
 
     <!-- ═══════════════════════════════════════════════ -->
     <!--  DETAIL SCREEN (item detail)                     -->
     <!-- ═══════════════════════════════════════════════ -->
     <div id="detailScreen" class="workspace">
-        <a href="#" id="btnCloseDetail" class="secondary-btn">← Back</a>
+        <a href="#" id="btnCloseDetail" class="secondary-btn"><i class="fa-solid fa-arrow-left"></i> Back</a>
         <h2 id="detailTitle"></h2>
         <div id="detailContent"></div>
     </div>
@@ -366,7 +410,7 @@ window.OpenBox.Storage   = window.OpenBox.Storage   || {};
             <p>3. Downloads use escrow.</p>
             <p>4. Byflints are non-refundable, non-cashable.</p>
             <p>5. Violations lead to suspension.</p>
-            <a href="#" id="btnCloseRules" class="secondary-btn">Close</a>
+            <a href="#" id="btnCloseRules" class="secondary-btn"><i class="fa-solid fa-xmark"></i> Close</a>
         </div>
     </div>
 
@@ -374,8 +418,8 @@ window.OpenBox.Storage   = window.OpenBox.Storage   || {};
         <div class="modal-content">
             <h3 id="checkoutTitle"></h3>
             <p>Amount: <strong id="checkoutAmount"></strong> byflints</p>
-            <a href="#" id="btnConfirmCheckout" class="primary-btn">Confirm</a>
-            <a href="#" id="btnCloseCheckout" class="secondary-btn">Cancel</a>
+            <a href="#" id="btnConfirmCheckout" class="primary-btn"><i class="fa-solid fa-check"></i> Confirm</a>
+            <a href="#" id="btnCloseCheckout" class="secondary-btn"><i class="fa-solid fa-xmark"></i> Cancel</a>
         </div>
     </div>
 
@@ -383,92 +427,4 @@ window.OpenBox.Storage   = window.OpenBox.Storage   || {};
     <!--  BOTTOM NAV                                      -->
     <!-- ═══════════════════════════════════════════════ -->
     <nav class="bottom-nav" id="bottomNav" style="display:none;">
-        <a href="#" data-workspace="workspaceHome" class="nav-link active">Home</a>
-        <a href="#" data-workspace="workspaceMyHome" class="nav-link">My Home</a>
-        <a href="#" data-workspace="workspaceUpload" class="nav-link">Upload</a>
-        <a href="#" data-workspace="workspaceFantasy" class="nav-link">Fantasy</a>
-        <a href="#" data-workspace="workspaceMessages" class="nav-link">Messages</a>
-        <a href="#" data-workspace="workspaceWallet" class="nav-link">Wallet</a>
-<a href="#" data-workspace="workspaceNews" class="nav-link">News</a>
-    </nav>
-
-<div id="workspaceNews" class="workspace">
-    <header class="top-header">
-        <h2 class="brand brand-lg">🏆 GlobalSoccerFantasy</h2>
-        <div class="fantasy-week">News</div>
-    </header>
-    <div id="newsBody"><p class="hint">Loading...</p></div>
-</div>
-</div>
-
-<script src="js/config.js"></script>
-<script src="js/api.js"></script>
-<script src="js/gsp.js"></script>
-<script src="js/auth.js"></script>
-<script src="js/wallet.js"></script>
-<script src="js/files.js"></script>
-<script src="js/messages.js"></script>
-<script src="js/groups.js"></script>
-<script src="js/fantasy.js"></script>
-<script src="js/fantasy_registry_extend.js"></script>
-<script src="js/fantasy_registry_extend2.js"></script>
-<script src="js/news.js"></script>
-<script src="js/ui.js"></script>
-<script src="js/fantasy_registry.js"></script>
-<script src="js/app.js"></script>
-<script src="js/bubblejumbo_widget.js"></script>
-
-<!-- ═══════════════════════════════════════════════ -->
-<!--  FALLBACK WIRING + DIAGNOSTICS                   -->
-<!--  Runs after all scripts load.                    -->
-<!-- ═══════════════════════════════════════════════ -->
-<script>
-(function () {
-    function safeWire(id, handlerName) {
-        const el = document.getElementById(id);
-        if (!el) { console.warn('[wire] missing element', id); return; }
-        el.addEventListener('click', function (e) {
-            e.preventDefault();
-            const parts = handlerName.split('.');
-            let obj = window;
-            for (let i = 0; i < parts.length; i++) {
-                obj = obj?.[parts[i]];
-                if (obj === undefined) break;
-            }
-            if (typeof obj === 'function') {
-                obj();
-            } else {
-                console.error('[wire] handler not found:', handlerName, ' window.OpenBox =', window.OpenBox);
-                alert('App not fully loaded. Check console (F12) for the error.');
-            }
-        });
-    }
-
-    window.addEventListener('DOMContentLoaded', function () {
-        // Wire buttons with a safe fallback (in addition to the global ui.js handler)
-        safeWire('btnLogin',  'OpenBox.Auth.login');
-        safeWire('btnSignup', 'OpenBox.Auth.signup');
-        safeWire('btnLogout', 'OpenBox.Auth.logout');
-
-        // Diagnostic: verify scripts loaded
-        const checks = [
-            ['OpenBox',            window.OpenBox],
-            ['OpenBox.API',        window.OpenBox?.API],
-            ['OpenBox.Auth',       window.OpenBox?.Auth],
-            ['OpenBox.Auth.signup',window.OpenBox?.Auth?.signup],
-        ];
-        console.group('🏆 GlobalSoccerFantasy — load check');
-        checks.forEach(([name, val]) => {
-            console.log(val ? '✔ ' + name : '✘ MISSING: ' + name, val || '');
-        });
-        console.groupEnd();
-    });
-
-    // Surface any runtime error clearly
-    window.addEventListener('error', function (e) {
-        console.error('[Runtime Error]', e.message, '@', e.filename, ':', e.lineno);
-    });
-})();
-</script>
-</body>
-</html>
+        <a href="#" data-workspace="works
