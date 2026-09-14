@@ -604,18 +604,19 @@ def bzz_sync_ep(request: Request):
 def tm_check(request: Request):
     _admin_guard(request)
     urls = [
-        "https://raw.githubusercontent.com/salimt/football-datasets/main/datalake/transfermarkt/raw/teams_details/teams_details",
-        "https://raw.githubusercontent.com/salimt/football-datasets/main/datalake/transfermarkt/raw/player_profiles/player_profiles",
+        "https://raw.githubusercontent.com/salimt/football-datasets/main/datalake/transfermarkt/team_details/team_details.csv",
+        "https://raw.githubusercontent.com/salimt/football-datasets/main/datalake/transfermarkt/player_profiles/player_profiles.csv",
     ]
     out = []
     try:
         with httpx.Client(timeout=30, follow_redirects=True) as c:
             for u in urls:
                 r = c.head(u)
+                size = int(r.headers.get("content-length") or 0)
                 out.append({
                     "file": u.split("/")[-1],
                     "status": r.status_code,
-                    "size_mb": round(int(r.headers.get("content-length") or 0) / 1024 / 1024, 2),
+                    "size_mb": round(size / 1024 / 1024, 2),
                 })
         return {"sources": out, "all_ok": all(x["status"] == 200 for x in out)}
     except Exception as e:
