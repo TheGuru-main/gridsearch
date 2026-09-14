@@ -435,8 +435,7 @@
             e.preventDefault(); setView('team');
         });
     }
-
-    // ═══════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
     //  VIEW: TEAM SHEET (pitch layout)
     // ═══════════════════════════════════════════════════
     function renderTeam(body) {
@@ -476,4 +475,110 @@
             <div class="pitch">
                 <div class="pitch-row fwd">${startingXI.FWD.map(playerChip).join('')}</div>
                 <div class="pitch-row mid">${startingXI.MID.map(playerChip).join('')}</div>
-                <div class="pitch-row def">${startingXI.DEF.map
+                <div class="pitch-row def">${startingXI.DEF.map(playerChip).join('')}</div>
+                <div class="pitch-row gk">${startingXI.GK.map(playerChip).join('')}</div>
+            </div>
+            <h4 class="pos-header">Bench · ${bench.length}</h4>
+            <div class="bench-list">
+                ${bench.length
+                    ? bench.map(p => `<div class="bench-item">${p.name} <small>${p.pos}</small></div>`).join('')
+                    : '<p class="hint">No bench players.</p>'}
+            </div>
+        `;
+
+        document.getElementById('back').addEventListener('click', (e) => {
+            e.preventDefault(); setView('squad');
+        });
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  VIEW: HOT (top scorer simulation)
+    // ═══════════════════════════════════════════════════
+    function renderHot(body) {
+        const list = getTournaments();
+        if (!list.length) { body.innerHTML = '<p class="hint">No data.</p>'; return; }
+
+        // Pick top player per tournament
+        const week = Math.floor(Date.now() / (7 * 86400000));
+        const rows = list.map(t => {
+            const tid = t.id;
+            const tour = OpenBox.FantasyRegistry.tournaments[tid];
+            if (!tour || !tour.clubs.length) return null;
+            const firstClub = tour.clubs[0];
+            const players = getClubPlayers(tid, firstClub.id);
+            if (!players.length) return null;
+            const scored = players.map(p => {
+                const h = (p.id + ":" + week).split("").reduce((s, c) => (s * 31 + c.charCodeAt(0)) >>> 0, 0);
+                return { p, pts: ((h % 120) / 10 + 1).toFixed(1) };
+            });
+            const top = scored.reduce((a, b) => (parseFloat(b.pts) > parseFloat(a.pts) ? b : a));
+            return { tid, tournament: t.name, player: top.p, pts: top.pts };
+        }).filter(Boolean);
+
+        body.innerHTML = `
+            <h3>🔥 Hot This Week</h3>
+            <div class="hot-list">
+                ${rows.map(r => `
+                    <div class="hot-player">
+                        <div>
+                            <strong>${r.player.name}</strong>
+                            <small>${r.tournament} · ${r.player.pos}</small>
+                        </div>
+                        <div class="hot-pts">
+                            ${r.pts} pts<br>
+                            <small>${r.player.price} bf</small>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  VIEW: TRANSFERS
+    // ═══════════════════════════════════════════════════
+    async function renderTransfers(body) {
+        body.innerHTML = '<p class="hint">Loading transfers...</p>';
+        try {
+            const r = await OpenBox.API.transfers(30);
+            const list = r?.data?.transfers || [];
+            if (!list.length) {
+                body.innerHTML = `
+                    <h3>📋 Transfers</h3>
+                    <p class="hint">No transfers in the last 30 days. The scraper runs every 6 hours.
+                    Once it completes, real transfer data will appear here.</p>
+                `;
+                return;
+            }
+            body.innerHTML = `
+                <h3>📋 Recent Transfers (30 days)</h3>
+                <div class="transfer-list">
+                    ${list.map(t => `
+                        <div class="transfer-row">
+                            <strong>${t.player_name}</strong>
+                            <small>${t.from_club || '?'} → ${t.to_club || '?'}</small>
+                            <span>${t.fee || '—'} · ${t.date || ''} · ${t.source || ''}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        } catch (err) {
+            body.innerHTML = `<p class="hint">Could not load transfers: ${err.message}</p>`;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  TAB WIRING
+    // ═══════════════════════════════════════════════════
+    document.addEventListener("DOMContentLoaded", () => {
+        document.querySelectorAll(".ftab").forEach(t => {
+            t.addEventListener("click", (e) => {
+                e.preventDefault();
+                const v = t.dataset.ftab;
+                setView(v);
+            });
+        });
+    });
+
+    OpenBox.Fantasy = { show, loadSquad, saveSquad, emptySquad };
+})();
