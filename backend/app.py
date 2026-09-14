@@ -426,23 +426,93 @@ def health():
 # ═══════════════════════════════════════════════════════
 SCRAPER_TOKEN = os.environ.get("SCRAPER_TOKEN", "CHANGE_ME")
 
-@app.get("/api/admin/run-scraper")
-def admin_run_scraper(request: Request):
+@app.get("/api/admin/scraper-diag")
+def admin_scraper_diag(request: Request):
+    """Report what the scraper environment looks like. No side effects."""
     if request.query_params.get("token", "") != SCRAPER_TOKEN:
         raise HTTPException(403, "Forbidden")
-    import threading, sys, asyncio
+
+    report = {"env": {}, "imports": {}, "db": {}}
+
+    # Env vars
+    report["env"]["DATABASE_URL_set"] = bool(os.environ.get("DATABASE_URL"))
+    report["env"]["SPORTMONKS_KEY_set"] = bool(os.environ.get("SPORTMONKS_KEY"))
+    report["env"]["GNEWS_KEY_set"] = bool(os.environ.get("GNEWS_KEY"))
+    report["env"]["SCRAPER_TOKEN_set"] = bool(os.environ.get("SCRAPER_TOKEN"))
+
+    # Imports
+    try:
+        from database import engine
+        report["imports"]["database"] = "ok"
+        report["db"]["url_prefix"] = str(engine.url).split("@")[-1] if "@" in str(engine.url) else "?"
+    except Exception as e:
+        report["imports"]["database"] = f"FAIL: {e}"
+
+    try:
+        import models
+        report["imports"]["models"] = "ok"
+    except Exception as e:
+        report["imports"]["models"] = f"FAIL: {e}"
+
+    try:
+        from run_sync import main as sync_main
+        report["imports"]["run_sync"] = "ok"
+    except Exception as e:
+        report["imports"]["run_sync"] = f"FAIL: {e}"
+
+    try:
+        from config import SPORTMONKS_KEY, LEAGUES
+        report["imports"]["config"] = "ok"
+        report["env"]["leagues_count"] = len(LEAGUES)
+    except Exception as e:
+        report["imports"]["config"] = f"FAIL: {e}"
+
+    try:
+        import httpx, feedparser
+        from bs4 import BeautifulSoup
+        report["imports"]["deps"] = "ok"
+    except Exception as e:
+        report["imports"]["deps"] = f"FAIL: {e}"
+
+    return report
+
+
+@app.get("/api/admin/run-scraper")
+async def admin_run_scraper(request: Request):
+    """Runs the scraper synchronously so errors come back in the HTTP response."""
+    if request.query_params.get("token", "") != SCRAPER_TOKEN:
+        raise HTTPException(403, "Forbidden")
+
+    import sys, asyncio
     from pathlib import Path
 
-    def _run():
-        try:
-            sys.path.insert(0, str(Path(__file__).resolve().parent))
-            from run_sync import main as sync_main
-            asyncio.run(sync_main())
-            print("[admin] scraper finished")
-        except Exception as e:
-            print("[admin] scraper failed:", e)
+    # Make sure sibling modules are importable
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-    threading.Thread(target=_run, daemon=True).start()
-    return {"ok": True, "message": "Scraper started. Watch Render logs."}
+    out_lines = []
+
+    def log(msg):
+        out_lines.append(str(msg))
+        print("[scraper]", msg, flush=True)
+
+    try:
+        log("importing run_sync...")
+        from run_sync import main as sync_main
+
+        log("starting sync (this may take minutes)...")
+        # Fire the actual run
+        asyncio.run(sync_main())
+        log("sync completed")
+
+        return {"ok": True, "output": out_lines}
+
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        log("EXCEPTION: " + str(e))
+        return JSONResponse(
+            status_code=500,
+            content={"ok": False, "error": str(e), "traceback": tb, "output": out_lines}
+        )
 
 app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
