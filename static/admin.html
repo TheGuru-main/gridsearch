@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scraper Admin</title>
+<style>
+body { font-family: monospace; background: #0a0a0f; color: #0f0; padding: 16px; }
+input, button, select { font-family: monospace; font-size: 14px; padding: 10px; margin: 6px 0; width: 100%; box-sizing: border-box; }
+input { background: #12121a; border: 1px solid #2a2a3d; color: #0f0; }
+button { background: #6c5ce7; color: #fff; border: none; border-radius: 6px; font-weight: 700; cursor: pointer; }
+button:disabled { background: #333; color: #666; }
+pre { background: #12121a; border: 1px solid #2a2a3d; padding: 10px; font-size: 11px; max-height: 400px; overflow: auto; white-space: pre-wrap; word-break: break-all; }
+h3 { color: #00d2ff; margin: 16px 0 8px; font-size: 14px; }
+.row { display: flex; gap: 8px; align-items: center; }
+.row input { flex: 1; }
+.row button { flex: 0 0 auto; width: auto; padding: 10px 16px; }
+</style>
+</head>
+<body>
+<h3>🔑 Token</h3>
+<input id="token" placeholder="SCRAPER_TOKEN" value="openbox2026run">
+
+<h3>1. Test API key</h3>
+<button onclick="test()">Test SportMonks</button>
+<pre id="out1">—</pre>
+
+<h3>2. Find a league's ID</h3>
+<div class="row">
+    <input id="q" placeholder="e.g. nigeria, caf, premier" value="premier">
+    <button onclick="find()">Search</button>
+</div>
+<pre id="out2">—</pre>
+
+<h3>3. Sync one league</h3>
+<div class="row">
+    <input id="league" placeholder="epl, laliga, npfl..." value="epl">
+    <button onclick="sync()" id="syncBtn">Run</button>
+</div>
+<pre id="out3">—</pre>
+
+<h3>4. Check DB counts</h3>
+<button onclick="counts()">Refresh counts</button>
+<pre id="out4">—</pre>
+
+<script>
+const t = () => encodeURIComponent(document.getElementById('token').value.trim());
+const out = (id, o) => document.getElementById(id).textContent = typeof o === 'string' ? o : JSON.stringify(o, null, 2);
+
+async function test() {
+    out('out1', 'Testing...');
+    const r = await fetch(`/api/admin/sp-test?token=${t()}`);
+    out('out1', await r.json());
+}
+async function find() {
+    const q = document.getElementById('q').value;
+    out('out2', 'Searching...');
+    const r = await fetch(`/api/admin/sp-find?token=${t()}&q=${encodeURIComponent(q)}`);
+    out('out2', await r.json());
+}
+async function sync() {
+    const btn = document.getElementById('syncBtn');
+    const league = document.getElementById('league').value.trim();
+    if (!league) return;
+    btn.disabled = true;
+    out('out3', 'Running ' + league + '... this can take 30-120 seconds.\nDo NOT close this tab.');
+    try {
+        const r = await fetch(`/api/admin/sp-sync?token=${t()}&league=${encodeURIComponent(league)}`);
+        out('out3', await r.json());
+    } catch (e) {
+        out('out3', 'Error: ' + e.message);
+    }
+    btn.disabled = false;
+    counts();
+}
+async function counts() {
+    const r = await fetch(`/api/admin/db-counts?token=${t()}`);
+    out('out4', await r.json());
+}
+counts();
+</script>
+</body>
+</html>
