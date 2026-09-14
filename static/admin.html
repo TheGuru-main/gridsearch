@@ -2,82 +2,348 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Scraper Admin</title>
 <style>
-body { font-family: monospace; background: #0a0a0f; color: #0f0; padding: 16px; }
-input, button, select { font-family: monospace; font-size: 14px; padding: 10px; margin: 6px 0; width: 100%; box-sizing: border-box; }
-input { background: #12121a; border: 1px solid #2a2a3d; color: #0f0; }
-button { background: #6c5ce7; color: #fff; border: none; border-radius: 6px; font-weight: 700; cursor: pointer; }
-button:disabled { background: #333; color: #666; }
-pre { background: #12121a; border: 1px solid #2a2a3d; padding: 10px; font-size: 11px; max-height: 400px; overflow: auto; white-space: pre-wrap; word-break: break-all; }
-h3 { color: #00d2ff; margin: 16px 0 8px; font-size: 14px; }
-.row { display: flex; gap: 8px; align-items: center; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'JetBrains Mono', 'Fira Code', monospace; background: #0a0a0f; color: #e8e8f0; padding: 12px; font-size: 13px; }
+h1 { font-size: 1.1rem; color: #00d2ff; margin-bottom: 12px; letter-spacing: 0.05em; }
+h3 { font-size: 0.85rem; color: #b8aaff; margin: 16px 0 8px; letter-spacing: 0.08em; text-transform: uppercase; }
+input, button, select { font-family: inherit; font-size: 13px; padding: 10px; margin: 4px 0; width: 100%; border-radius: 6px; border: 1px solid #2a2a3d; background: #12121a; color: #e8e8f0; }
+input:focus, select:focus { outline: none; border-color: #6c5ce7; }
+button { background: #6c5ce7; color: #fff; border: none; font-weight: 700; cursor: pointer; letter-spacing: 0.04em; }
+button:hover { background: #8b7cf7; }
+button:disabled { background: #333; color: #666; cursor: not-allowed; }
+button.ghost { background: #1a1a26; color: #e8e8f0; border: 1px solid #2a2a3d; }
+button.ghost:hover { background: #222233; }
+button.success { background: #16a34a; }
+button.warn { background: #b45309; }
+
+.tabs { display: flex; gap: 4px; margin-bottom: 12px; overflow-x: auto; }
+.tab { flex: 0 0 auto; padding: 8px 14px; background: #12121a; border: 1px solid #2a2a3d; color: #8888a0; border-radius: 999px; font-weight: 700; font-size: 0.75rem; white-space: nowrap; cursor: pointer; }
+.tab.active { background: #6c5ce7; color: #fff; border-color: #6c5ce7; }
+.pane { display: none; }
+.pane.active { display: block; }
+.row { display: flex; gap: 6px; align-items: center; }
 .row input { flex: 1; }
-.row button { flex: 0 0 auto; width: auto; padding: 10px 16px; }
+.row button { flex: 0 0 auto; width: auto; padding: 10px 14px; }
+pre { background: #12121a; border: 1px solid #2a2a3d; border-radius: 6px; padding: 10px; font-size: 11px; max-height: 340px; overflow: auto; white-space: pre-wrap; word-break: break-word; color: #00ff88; }
+pre.err { color: #ff6b6b; }
+.note { background: #12121a; border-left: 3px solid #ffd700; padding: 8px 10px; font-size: 0.75rem; color: #aaa; margin: 8px 0; border-radius: 4px; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.65rem; font-weight: 700; letter-spacing: 0.05em; margin-left: 6px; }
+.badge.free { background: rgba(0,255,136,0.15); color: #00ff88; }
+.badge.token { background: rgba(0,210,255,0.15); color: #00d2ff; }
+.badge.csv { background: rgba(255,215,0,0.15); color: #ffd700; }
+.league-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 6px; margin-top: 8px; }
+.league-btn { padding: 8px 6px; background: #1a1a26; border: 1px solid #2a2a3d; border-radius: 6px; color: #e8e8f0; font-size: 0.75rem; font-weight: 600; cursor: pointer; text-align: center; }
+.league-btn:hover { border-color: #6c5ce7; }
+.league-btn.done { background: rgba(22,163,74,0.15); border-color: #16a34a; color: #16a34a; }
+.league-btn.busy { background: rgba(108,92,231,0.2); border-color: #6c5ce7; animation: pulse 1s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
 </style>
 </head>
 <body>
-<h3>🔑 Token</h3>
-<input id="token" placeholder="SCRAPER_TOKEN" value="openbox2026run">
 
-<h3>1. Test API key</h3>
-<button onclick="test()">Test SportMonks</button>
-<pre id="out1">—</pre>
+<h1>🏆 GlobalSoccerFantasy — Scraper Admin</h1>
 
-<h3>2. Find a league's ID</h3>
-<div class="row">
-    <input id="q" placeholder="e.g. nigeria, caf, premier" value="premier">
-    <button onclick="find()">Search</button>
+<div class="row" style="margin-bottom:12px;">
+    <input id="token" placeholder="SCRAPER_TOKEN" value="openbox2026run">
+    <button class="ghost" onclick="counts()">🔄 Refresh</button>
 </div>
-<pre id="out2">—</pre>
 
-<h3>3. Sync one league</h3>
-<div class="row">
-    <input id="league" placeholder="epl, laliga, npfl..." value="epl">
-    <button onclick="sync()" id="syncBtn">Run</button>
+<div class="note">
+    Fill player data from <strong>three free sources</strong>. Each works independently.
+    Run them in any order.
 </div>
-<pre id="out3">—</pre>
 
-<h3>4. Check DB counts</h3>
-<button onclick="counts()">Refresh counts</button>
-<pre id="out4">—</pre>
+<!-- ═══════════════════════════════════════════════ -->
+<!--  TABS                                            -->
+<!-- ═══════════════════════════════════════════════ -->
+<div class="tabs">
+    <div class="tab active" data-tab="sportsdb">TheSportsDB <span class="badge free">FREE</span></div>
+    <div class="tab" data-tab="bzzoiro">Bzzoiro <span class="badge token">TOKEN</span></div>
+    <div class="tab" data-tab="tm">Transfermarkt <span class="badge csv">CSV</span></div>
+    <div class="tab" data-tab="db">Database</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!--  THE SPORTS DB                                   -->
+<!-- ═══════════════════════════════════════════════ -->
+<div class="pane active" id="pane-sportsdb">
+    <h3>1. Test connection</h3>
+    <button onclick="tsdbTest()">Test TheSportsDB</button>
+    <pre id="tsdbOut1">—</pre>
+
+    <h3>2. Preview a league</h3>
+    <div class="row">
+        <select id="tsdbLeague">
+            <option value="English Premier League">EPL</option>
+            <option value="Spanish La Liga">La Liga</option>
+            <option value="Italian Serie A">Serie A</option>
+            <option value="German Bundesliga">Bundesliga</option>
+            <option value="French Ligue 1">Ligue 1</option>
+            <option value="Dutch Eredivisie">Eredivisie</option>
+            <option value="Portuguese Primeira Liga">Primeira Liga</option>
+            <option value="Turkish Super Lig">Süper Lig</option>
+            <option value="American Major League Soccer">MLS</option>
+            <option value="Mexican Primera League">Liga MX</option>
+            <option value="Brazilian Serie A">Brasileirão</option>
+            <option value="Saudi Pro League">Saudi Pro League</option>
+            <option value="Japanese J League">J1 League</option>
+            <option value="Nigerian Professional Football League">NPFL</option>
+            <option value="South African Premier Division">South African PSL</option>
+            <option value="Moroccan Botola Pro">Botola Pro</option>
+        </select>
+        <button onclick="tsdbPreview()">Preview</button>
+    </div>
+    <pre id="tsdbOut2">—</pre>
+
+    <h3>3. Sync a league (fetch all clubs + players)</h3>
+    <div class="row">
+        <select id="tsdbSyncLeague">
+            <option value="English Premier League">EPL</option>
+            <option value="Spanish La Liga">La Liga</option>
+            <option value="Italian Serie A">Serie A</option>
+            <option value="German Bundesliga">Bundesliga</option>
+            <option value="French Ligue 1">Ligue 1</option>
+            <option value="Dutch Eredivisie">Eredivisie</option>
+            <option value="Portuguese Primeira Liga">Primeira Liga</option>
+            <option value="Turkish Super Lig">Süper Lig</option>
+            <option value="American Major League Soccer">MLS</option>
+            <option value="Mexican Primera League">Liga MX</option>
+            <option value="Brazilian Serie A">Brasileirão</option>
+            <option value="Saudi Pro League">Saudi Pro League</option>
+            <option value="Japanese J League">J1 League</option>
+            <option value="Nigerian Professional Football League">NPFL</option>
+            <option value="South African Premier Division">South African PSL</option>
+            <option value="Moroccan Botola Pro">Botola Pro</option>
+        </select>
+        <button onclick="tsdbSync()" id="tsdbSyncBtn">Sync</button>
+    </div>
+    <pre id="tsdbOut3">—</pre>
+</div>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!--  BZZOIRO                                         -->
+<!-- ═══════════════════════════════════════════════ -->
+<div class="pane" id="pane-bzzoiro">
+    <div class="note">
+        Register at <a href="https://sports.bzzoiro.com/register/" target="_blank" style="color:#00d2ff">sports.bzzoiro.com/register</a>.
+        Free, email only. Verify email, copy token from dashboard, paste below.
+    </div>
+
+    <h3>1. Token</h3>
+    <input id="bzzToken" placeholder="Bzzoiro token" type="password">
+    <button class="ghost" onclick="saveBzzToken()">💾 Save token to localStorage</button>
+
+    <h3>2. Test connection</h3>
+    <button onclick="bzzTest()">Test Bzzoiro</button>
+    <pre id="bzzOut1">—</pre>
+
+    <h3>3. List leagues</h3>
+    <button onclick="bzzLeagues()">Get leagues</button>
+    <pre id="bzzOut2">—</pre>
+
+    <h3>4. Sync a league by ID</h3>
+    <div class="row">
+        <input id="bzzLeagueId" placeholder="League ID from step 3" type="number">
+        <button onclick="bzzSync()" id="bzzSyncBtn">Sync</button>
+    </div>
+    <pre id="bzzOut3">—</pre>
+</div>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!--  TRANSFERMARKT CSV                               -->
+<!-- ═══════════════════════════════════════════════ -->
+<div class="pane" id="pane-tm">
+    <div class="note">
+        The GitHub Transfermarkt dataset has <strong>92,671 players</strong> and <strong>2,175 clubs</strong>
+        across all major leagues. One import fills the entire database. No API key required.
+    </div>
+
+    <h3>1. Check if dataset is available</h3>
+    <button onclick="tmCheck()">Check dataset</button>
+    <pre id="tmOut1">—</pre>
+
+    <h3>2. Import full dataset</h3>
+    <button onclick="tmImport()" id="tmBtn">⬇️ Download &amp; Import</button>
+    <div class="note">
+        This downloads ~150 MB of CSV from GitHub and inserts into Neon.
+        Runs once. Takes 3–10 minutes. Do not close the tab.
+    </div>
+    <pre id="tmOut2">—</pre>
+</div>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!--  DATABASE                                        -->
+<!-- ═══════════════════════════════════════════════ -->
+<div class="pane" id="pane-db">
+    <h3>Neon database — current state</h3>
+    <button onclick="counts()">🔄 Refresh counts</button>
+    <pre id="dbOut">—</pre>
+
+    <h3>Sync history</h3>
+    <button onclick="logs()">🔄 Refresh logs</button>
+    <pre id="dbLogs">—</pre>
+
+    <h3>Danger zone</h3>
+    <button class="warn" onclick="wipePlayers()">🗑️ Delete all players (keep clubs)</button>
+    <pre id="dbWipe">—</pre>
+</div>
 
 <script>
-const t = () => encodeURIComponent(document.getElementById('token').value.trim());
-const out = (id, o) => document.getElementById(id).textContent = typeof o === 'string' ? o : JSON.stringify(o, null, 2);
+const $ = id => document.getElementById(id);
+const tok = () => encodeURIComponent($('token').value.trim());
+const out = (id, o, isErr) => {
+    const el = $(id);
+    el.textContent = typeof o === 'string' ? o : JSON.stringify(o, null, 2);
+    el.className = isErr ? 'err' : '';
+};
 
-async function test() {
-    out('out1', 'Testing...');
-    const r = await fetch(`/api/admin/sp-test?token=${t()}`);
-    out('out1', await r.json());
-}
-async function find() {
-    const q = document.getElementById('q').value;
-    out('out2', 'Searching...');
-    const r = await fetch(`/api/admin/sp-find?token=${t()}&q=${encodeURIComponent(q)}`);
-    out('out2', await r.json());
-}
-async function sync() {
-    const btn = document.getElementById('syncBtn');
-    const league = document.getElementById('league').value.trim();
-    if (!league) return;
-    btn.disabled = true;
-    out('out3', 'Running ' + league + '... this can take 30-120 seconds.\nDo NOT close this tab.');
+// ─── Tab switching ───
+document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+        document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
+        t.classList.add('active');
+        $('pane-' + t.dataset.tab).classList.add('active');
+        if (t.dataset.tab === 'db') { counts(); logs(); }
+    });
+});
+
+// ═══════════════════════════════════════════════
+//  THE SPORTS DB
+// ═══════════════════════════════════════════════
+async function tsdbTest() {
+    out('tsdbOut1', 'Testing...');
     try {
-        const r = await fetch(`/api/admin/sp-sync?token=${t()}&league=${encodeURIComponent(league)}`);
-        out('out3', await r.json());
-    } catch (e) {
-        out('out3', 'Error: ' + e.message);
-    }
+        const r = await fetch(`/api/admin/tsdb-test?token=${tok()}`);
+        out('tsdbOut1', await r.json(), !r.ok);
+    } catch (e) { out('tsdbOut1', 'Error: ' + e.message, true); }
+}
+
+async function tsdbPreview() {
+    const lg = $('tsdbLeague').value;
+    out('tsdbOut2', 'Fetching ' + lg + '...');
+    try {
+        const r = await fetch(`/api/admin/tsdb-preview?token=${tok()}&league=${encodeURIComponent(lg)}`);
+        out('tsdbOut2', await r.json(), !r.ok);
+    } catch (e) { out('tsdbOut2', 'Error: ' + e.message, true); }
+}
+
+async function tsdbSync() {
+    const lg = $('tsdbSyncLeague').value;
+    const btn = $('tsdbSyncBtn');
+    btn.disabled = true;
+    out('tsdbOut3', 'Syncing ' + lg + '...\nFetching teams and players one at a time.\nThis can take 60-180 seconds. Do not close this tab.');
+    try {
+        const r = await fetch(`/api/admin/tsdb-sync?token=${tok()}&league=${encodeURIComponent(lg)}`);
+        out('tsdbOut3', await r.json(), !r.ok);
+    } catch (e) { out('tsdbOut3', 'Error: ' + e.message, true); }
     btn.disabled = false;
     counts();
 }
-async function counts() {
-    const r = await fetch(`/api/admin/db-counts?token=${t()}`);
-    out('out4', await r.json());
+
+// ═══════════════════════════════════════════════
+//  BZZOIRO
+// ═══════════════════════════════════════════════
+function saveBzzToken() {
+    const t = $('bzzToken').value.trim();
+    if (!t) return alert('Enter a token');
+    localStorage.setItem('bz_token', t);
+    alert('Saved to this device only. The backend still needs BZZOIRO_TOKEN env var set on Render.');
 }
+
+// Load saved token on page load
+(function () {
+    const saved = localStorage.getItem('bz_token');
+    if (saved) $('bzzToken').value = saved;
+})();
+
+async function bzzTest() {
+    out('bzzOut1', 'Testing...');
+    try {
+        const r = await fetch(`/api/admin/bzz-test?token=${tok()}`);
+        out('bzzOut1', await r.json(), !r.ok);
+    } catch (e) { out('bzzOut1', 'Error: ' + e.message, true); }
+}
+
+async function bzzLeagues() {
+    out('bzzOut2', 'Fetching leagues...');
+    try {
+        const r = await fetch(`/api/admin/bzz-leagues?token=${tok()}`);
+        out('bzzOut2', await r.json(), !r.ok);
+    } catch (e) { out('bzzOut2', 'Error: ' + e.message, true); }
+}
+
+async function bzzSync() {
+    const lid = $('bzzLeagueId').value;
+    if (!lid) return alert('Enter a league ID from step 3');
+    const btn = $('bzzSyncBtn');
+    btn.disabled = true;
+    out('bzzOut3', 'Syncing league ' + lid + '...');
+    try {
+        const r = await fetch(`/api/admin/bzz-sync?token=${tok()}&league_id=${lid}`);
+        out('bzzOut3', await r.json(), !r.ok);
+    } catch (e) { out('bzzOut3', 'Error: ' + e.message, true); }
+    btn.disabled = false;
+    counts();
+}
+
+// ═══════════════════════════════════════════════
+//  TRANSFERMARKT
+// ═══════════════════════════════════════════════
+async function tmCheck() {
+    out('tmOut1', 'Checking...');
+    try {
+        const r = await fetch(`/api/admin/tm-check?token=${tok()}`);
+        out('tmOut1', await r.json(), !r.ok);
+    } catch (e) { out('tmOut1', 'Error: ' + e.message, true); }
+}
+
+async function tmImport() {
+    const btn = $('tmBtn');
+    btn.disabled = true;
+    out('tmOut2', 'Downloading CSVs from GitHub...\nThis takes 3-10 minutes. Do not close this tab.');
+    try {
+        const r = await fetch(`/api/admin/tm-import?token=${tok()}`, { method: 'POST' });
+        out('tmOut2', await r.json(), !r.ok);
+    } catch (e) { out('tmOut2', 'Error: ' + e.message, true); }
+    btn.disabled = false;
+    counts();
+}
+
+// ═══════════════════════════════════════════════
+//  DATABASE
+// ═══════════════════════════════════════════════
+async function counts() {
+    try {
+        const r = await fetch(`/api/admin/db-counts?token=${tok()}`);
+        out('dbOut', await r.json(), !r.ok);
+    } catch (e) { out('dbOut', 'Error: ' + e.message, true); }
+}
+
+async function logs() {
+    try {
+        const r = await fetch(`/api/admin/db-logs?token=${tok()}`);
+        out('dbLogs', await r.json(), !r.ok);
+    } catch (e) { out('dbLogs', 'Error: ' + e.message, true); }
+}
+
+async function wipePlayers() {
+    if (!confirm('Delete ALL players from Neon? Clubs stay. This cannot be undone.')) return;
+    if (!confirm('Really sure? Type-safe by design.')) return;
+    try {
+        const r = await fetch(`/api/admin/db-wipe-players?token=${tok()}`, { method: 'POST' });
+        out('dbWipe', await r.json(), !r.ok);
+        counts();
+    } catch (e) { out('dbWipe', 'Error: ' + e.message, true); }
+}
+
+// Initial load
 counts();
+logs();
 </script>
+
 </body>
 </html>
