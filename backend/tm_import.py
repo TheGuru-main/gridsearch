@@ -1,11 +1,6 @@
 """
-Transfermarkt CSV import — corrected.
-- No .csv extension on URLs
-- teams_details (plural)
-- Filters youth clubs (U18, U23, II, Youth)
-- Parses club ID from "Current club URL"
-- Skips retired / without-club players
-- Batched commits with progress printed
+Transfermarkt CSV import — verified URLs, columns, and youth filtering.
+Source: github.com/salimt/football-datasets
 """
 import csv
 import io
@@ -13,13 +8,13 @@ import httpx
 from database import SessionLocal, init_db
 from storage import upsert_club, upsert_player, log_sync
 
-GH = "https://raw.githubusercontent.com/salimt/football-datasets/main/datalake/transfermarkt/raw"
+GH = "https://raw.githubusercontent.com/salimt/football-datasets/main/datalake/transfermarkt"
 
-TEAMS_URL   = f"{GH}/teams_details/teams_details"
-PLAYERS_URL = f"{GH}/player_profiles/player_profiles"
+TEAMS_URL   = f"{GH}/team_details/team_details.csv"
+PLAYERS_URL = f"{GH}/player_profiles/player_profiles.csv"
 
-# Youth / reserve club detection
-YOUTH_TOKENS = ["under", "u18", "u19", "u20", "u21", "u23", "youth", " ii", " ii ", "b team", "reserves"]
+YOUTH_TOKENS = ["under", "u18", "u19", "u20", "u21", "u23",
+                "youth", " ii", " ii ", "b team", "reserves", "academy"]
 
 
 def _is_youth(name: str, slug: str) -> bool:
@@ -37,11 +32,15 @@ def _download(url: str, label: str) -> str:
 
 
 def _club_id_from_url(url: str) -> str:
-    """Extract numeric club ID from Transfermarkt URL like /napoli/startseite/verein/6195"""
+    """Extract numeric club ID from URLs like:
+       /napoli/startseite/verein/6195
+       /vereinslos/startseite/verein/515
+       /retired/startseite/verein/123
+    """
     if not url:
         return ""
-    if "verein/" in url:
-        return url.split("verein/")[-1].split("/")[0].split("?")[0].strip()
+    if "/verein/" in url:
+        return url.split("/verein/")[-1].split("/")[0].split("?")[0].strip()
     return ""
 
 
@@ -61,7 +60,6 @@ def import_clubs() -> dict:
                 continue
             name = (row.get("club_name") or "").strip()
             slug = (row.get("club_slug") or "").strip()
-            # Skip youth clubs
             if _is_youth(name, slug):
                 stats["skipped_youth"] += 1
                 continue
@@ -83,16 +81,27 @@ def import_clubs() -> dict:
         stats["errors"].append(f"clubs write: {e}")
     finally:
         db.close()
-    print(f"[tm] clubs written: {stats['written']}, youth skipped: {stats['skipped_youth']}", flush=True)
+    print(f"[tm] clubs: {stats['written']} written, {stats['skipped_youth']} youth skipped", flush=True)
     return stats
 
 
+def _normalize_pos(p: str) -> str:
+    p = (p or "").lower()
+    if "goalkeeper" in p or p == "gk": return "GK"
+    if "defender" in p or "back" in p or p == "def": return "DEF"
+    if "midfield" in p or p == "mid": return "MID"
+    if "forward" in p or "attack" in p or "striker" in p or "winger" in p or p == "fwd":
+        return "FWD"
+    return "MID"
+
+
 def import_players() -> dict:
-    stats = {"written": 0, "skipped_retired": 0, "skipped_no_club": 0, "errors": []}
+    stats = {"written": 0, "skipped_retired": 0, "skipped_no_club": 0,
+             "skipped_youth": 0, "errors": []}
     try:
         text = _download(PLAYERS_URL, "players")
     except Exception as e:
-        return {"written": 0, "skipped_retired": 0, "skipped_no_club": 0, "errors": [f"download: {e}"]}
+        return {**stats, "errors": [f"download: {e}"]}
 
     reader = csv.DictReader(io.StringIO(text))
     db = SessionLocal()
@@ -102,16 +111,18 @@ def import_players() -> dict:
             if not pid:
                 continue
 
-            club_url = (row.get("Current club URL") or "").strip()
+            club_url  = (row.get("Current club URL") or "").strip()
             club_name = (row.get("Current club") or "").strip()
-
-            # Skip retired and without club
             low = club_url.lower()
-            if "retired" in low:
+
+            if "retired" in low or "date of death" in str(row).lower():
                 stats["skipped_retired"] += 1
                 continue
             if "vereinslos" in low or not club_url:
                 stats["skipped_no_club"] += 1
+                continue
+            if _is_youth(club_name, ""):
+                stats["skipped_youth"] += 1
                 continue
 
             club_id = _club_id_from_url(club_url)
@@ -119,11 +130,9 @@ def import_players() -> dict:
                 stats["skipped_no_club"] += 1
                 continue
 
-            # Skip youth clubs
-            if _is_youth(club_name, ""):
-                continue
+            # Position: prefer player_main_position, fall back to Position
+            pos = (row.get("player_main_position") or row.get("Position") or "").strip()
 
-            pos = (row.get("Position") or row.get("player_main_position") or "").strip()
             upsert_player(db, {
                 "id": f"tm:{pid}",
                 "name": (row.get("player_name") or "").strip(),
@@ -145,17 +154,8 @@ def import_players() -> dict:
         stats["errors"].append(f"players write: {e}")
     finally:
         db.close()
-    print(f"[tm] players written: {stats['written']}", flush=True)
+    print(f"[tm] players: {stats['written']} written", flush=True)
     return stats
-
-
-def _normalize_pos(p: str) -> str:
-    p = (p or "").lower()
-    if "goalkeeper" in p or p == "gk": return "GK"
-    if "defender" in p or "back" in p or p == "def": return "DEF"
-    if "midfield" in p or p == "mid": return "MID"
-    if "forward" in p or "attack" in p or "striker" in p or p == "fwd": return "FWD"
-    return "MID"
 
 
 def import_all() -> dict:
@@ -168,7 +168,8 @@ def import_all() -> dict:
         log_sync(db, "tm:import",
                  "ok" if not (clubs["errors"] or players["errors"]) else "partial",
                  players["written"],
-                 f"clubs={clubs['written']} youth_skipped={clubs['skipped_youth']} players={players['written']}")
+                 f"clubs={clubs['written']} youth={clubs['skipped_youth']} "
+                 f"players={players['written']} retired={players['skipped_retired']}")
     finally:
         db.close()
 
@@ -179,5 +180,6 @@ def import_all() -> dict:
         "players": players["written"],
         "players_skipped_retired": players["skipped_retired"],
         "players_skipped_no_club": players["skipped_no_club"],
+        "players_skipped_youth": players["skipped_youth"],
         "errors": clubs["errors"] + players["errors"],
     }
