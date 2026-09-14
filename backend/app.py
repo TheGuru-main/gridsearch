@@ -515,4 +515,24 @@ def admin_run_scraper(request: Request):
             content={"ok": False, "error": str(e), "traceback": tb, "output": out_lines}
         )
 
+@app.get("/api/admin/db-counts")
+def admin_db_counts(request: Request):
+    if request.query_params.get("token", "") != SCRAPER_TOKEN:
+        raise HTTPException(403, "Forbidden")
+    from models import Club, Player, Transfer, SyncLog
+    db = SessionLocal()
+    try:
+        return {
+            "clubs":     db.query(Club).count(),
+            "players":   db.query(Player).count(),
+            "transfers": db.query(Transfer).count(),
+            "recent_logs": [
+                {"task": r.task, "status": r.status, "count": r.count,
+                 "ran_at": r.ran_at, "message": r.message}
+                for r in db.query(SyncLog).order_by(SyncLog.ran_at.desc()).limit(10).all()
+            ]
+        }
+    finally:
+        db.close()
+
 app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
