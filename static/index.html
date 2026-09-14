@@ -427,4 +427,99 @@
     <!--  BOTTOM NAV                                      -->
     <!-- ═══════════════════════════════════════════════ -->
     <nav class="bottom-nav" id="bottomNav" style="display:none;">
-        <a href="#" data-workspace="works
+        <a href="#" data-workspace="workspaceHome" class="nav-link active"><i class="fa-solid fa-house"></i><span>Home</span></a>
+        <a href="#" data-workspace="workspaceMyHome" class="nav-link"><i class="fa-solid fa-users"></i><span>Groups</span></a>
+        <a href="#" data-workspace="workspaceUpload" class="nav-link"><i class="fa-solid fa-cloud-arrow-up"></i><span>Upload</span></a>
+        <a href="#" data-workspace="workspaceFantasy" class="nav-link"><i class="fa-solid fa-futbol"></i><span>Fantasy</span></a>
+        <a href="#" data-workspace="workspaceMessages" class="nav-link"><i class="fa-solid fa-comments"></i><span>Messages</span></a>
+        <a href="#" data-workspace="workspaceWallet" class="nav-link"><i class="fa-solid fa-wallet"></i><span>Wallet</span></a>
+        <a href="#" data-workspace="workspaceNews" class="nav-link"><i class="fa-solid fa-newspaper"></i><span>News</span></a>
+    </nav>
+</div>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!--  SCRIPTS — ORDER MATTERS                         -->
+<!-- ═══════════════════════════════════════════════ -->
+<script src="js/config.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/api.js"></script>
+<script src="js/gsp.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/wallet.js"></script>
+<script src="js/files.js"></script>
+<script src="js/messages.js"></script>
+<script src="js/groups.js"></script>
+<script src="js/fantasy_registry.js"></script>
+<script src="js/fantasy_registry_extend.js"></script>
+<script src="js/fantasy_registry_extend2.js"></script>
+<script src="js/fantasy.js"></script>
+<script src="js/news.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/app.js"></script>
+<script src="js/bubblejumbo_widget.js"></script>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!--  FALLBACK WIRING + DIAGNOSTICS                   -->
+<!-- ═══════════════════════════════════════════════ -->
+<script>
+(function () {
+    function safeWire(id, handlerName) {
+        var el = document.getElementById(id);
+        if (!el) { console.warn('[wire] missing element', id); return; }
+        el.addEventListener('click', function (e) {
+            e.preventDefault();
+            var parts = handlerName.split('.');
+            var obj = window;
+            for (var i = 0; i < parts.length; i++) {
+                obj = obj && obj[parts[i]];
+                if (obj === undefined) break;
+            }
+            if (typeof obj === 'function') {
+                obj();
+            } else {
+                console.error('[wire] handler not found:', handlerName, ' OpenBox =', window.OpenBox);
+                alert('App not fully loaded. Check console for the error.');
+            }
+        });
+    }
+
+    window.addEventListener('DOMContentLoaded', function () {
+        // Wire auth buttons
+        safeWire('btnLogin',  'OpenBox.Auth.login');
+        safeWire('btnSignup', 'OpenBox.Auth.signup');
+        safeWire('btnLogout', 'OpenBox.Auth.logout');
+
+        // Diagnostic report
+        var checks = [
+            ['OpenBox',             window.OpenBox],
+            ['OpenBox.API',         window.OpenBox && window.OpenBox.API],
+            ['OpenBox.API.signup',  window.OpenBox && window.OpenBox.API && window.OpenBox.API.signup],
+            ['OpenBox.Auth',        window.OpenBox && window.OpenBox.Auth],
+            ['OpenBox.Auth.signup', window.OpenBox && window.OpenBox.Auth && window.OpenBox.Auth.signup],
+            ['OpenBox.App',         window.OpenBox && window.OpenBox.App],
+            ['OpenBox.Storage',     window.OpenBox && window.OpenBox.Storage],
+            ['FantasyRegistry',     window.OpenBox && window.OpenBox.FantasyRegistry],
+            ['Tournament count',    window.OpenBox && window.OpenBox.FantasyRegistry
+                                    ? Object.keys(window.OpenBox.FantasyRegistry.tournaments || {}).length
+                                    : 0]
+        ];
+        console.group('🏆 GlobalSoccerFantasy — load check');
+        checks.forEach(function (c) {
+            var name = c[0], val = c[1];
+            if (typeof val === 'number') {
+                console.log('  ' + name + ': ' + val);
+            } else {
+                console.log((val ? '  ✔ ' : '  ✘ MISSING: ') + name, val || '');
+            }
+        });
+        console.groupEnd();
+    });
+
+    // Surface runtime errors
+    window.addEventListener('error', function (e) {
+        console.error('[Runtime Error]', e.message, '@', e.filename, ':', e.lineno);
+    });
+})();
+</script>
+</body>
+</html>
