@@ -321,3 +321,68 @@ input, select { width:100%; padding:0.9rem; margin:0.5rem 0; border-radius:1rem;
 }
 .transfer-row small { display: block; color: #666; font-size: 0.72rem; margin: 3px 0; }
 .transfer-row span { color: #888; font-size: 0.7rem; }
+
+/* ═══════════════════════════════════════════════
+   FONT AWESOME
+   ═══════════════════════════════════════════════ */
+.bottom-nav .nav-link {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 6px 0;
+    font-size: 0.65rem;
+    letter-spacing: 0.04em;
+}
+.bottom-nav .nav-link i {
+    font-size: 1.1rem;
+    line-height: 1;
+}
+.bottom-nav .nav-link.active i {
+    color: #ffd700;
+}
+.bottom-nav .nav-link.active span {
+    color: #fff;
+    font-weight: 700;
+}
+
+.auth-tab i,
+.cat-tab i,
+.ftab i {
+    margin-right: 6px;
+    font-size: 0.85em;
+}
+
+.primary-btn i,
+.secondary-btn i {
+    margin-right: 6px;
+}
+
+.icon-btn i {
+    font-size: 1.2rem;
+}
+
+/* Add these classes to buttons in HTML */
+.auth-tab.active i,
+.cat-tab.active i,
+.ftab.active i {
+    color: inherit;
+}
+
+/* Fantasy tournament rows */
+.tournament-item .chev {
+    font-size: 0.9rem;
+    color: #999;
+}
+.tournament-item i.chev::before {
+    content: "\f054"; /* fa-chevron-right */
+    font-family: "Font Awesome 6 Free";
+    font-weight: 900;
+}
+
+/* Player add button */
+.add-btn i {
+    margin-right: 3px;
+    font-size: 0.75em;
+}
