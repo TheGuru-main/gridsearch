@@ -51,11 +51,9 @@ POSITION_BONUS = {"GK": 0, "DEF": 20, "MID": 40, "FWD": 80,
 
 CATEGORY_COL = {"app": 0, "game": 1, "video": 2, "other": 3}
 
-UPLOAD_FEE = {"app": 15, "game": 20, "video": 10, "other": 5}
-DOWNLOAD_FEE = 3
-UPLOADER_SHARE = 2.5
-PLATFORM_SHARE = 0.5
-
+UPLOAD_FEE = {"app": 200000, "game": 200000, "video": 150000, "other": 0}
+DOWNLOAD_FEE = 3000
+UPLOADER_SHARE = 3000
 # ═══════════════════════════════════════════════════════
 #  HELPERS
 # ═══════════════════════════════════════════════════════
@@ -64,7 +62,7 @@ def hash_password(p: str) -> str:
 
 
 def current_gameweek() -> int:
-    epoch = time.mktime(time.strptime("2024-08-01", "%Y-%m-%d"))
+    epoch = time.mktime(time.strptime("2026-26-01", "%Y-%m-%d"))
     return int((time.time() - epoch) // (7 * 86400)) + 1
 
 
