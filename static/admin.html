@@ -2,160 +2,550 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Scraper Admin</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: 'JetBrains Mono', monospace; background: #0a0a0f; color: #e8e8f0; padding: 12px; font-size: 13px; }
-h1 { font-size: 1rem; color: #00d2ff; margin-bottom: 12px; }
-h3 { font-size: 0.8rem; color: #b8aaff; margin: 14px 0 8px; text-transform: uppercase; letter-spacing: 0.08em; }
-input, button, select { font-family: inherit; font-size: 13px; padding: 10px; width: 100%; border-radius: 6px; border: 1px solid #2a2a3d; background: #12121a; color: #e8e8f0; margin: 4px 0; }
-button { background: #6c5ce7; color: #fff; border: none; font-weight: 700; cursor: pointer; }
-button:disabled { background: #333; color: #666; }
-button.ghost { background: #1a1a26; border: 1px solid #2a2a3d; }
+html, body {
+    font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Menlo', 'Consolas', monospace;
+    background: #0a0a0f;
+    color: #e8e8f0;
+    padding: 12px;
+    font-size: 13px;
+    line-height: 1.45;
+    min-height: 100vh;
+    -webkit-text-size-adjust: 100%;
+}
+h1 {
+    font-size: 1rem;
+    color: #00d2ff;
+    margin-bottom: 12px;
+    letter-spacing: 0.05em;
+    font-weight: 800;
+}
+h3 {
+    font-size: 0.78rem;
+    color: #b8aaff;
+    margin: 16px 0 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 700;
+}
+input, button, select {
+    font-family: inherit;
+    font-size: 13px;
+    padding: 10px;
+    width: 100%;
+    border-radius: 6px;
+    border: 1px solid #2a2a3d;
+    background: #12121a;
+    color: #e8e8f0;
+    margin: 4px 0;
+    -webkit-appearance: none;
+    appearance: none;
+}
+input:focus, select:focus {
+    outline: none;
+    border-color: #6c5ce7;
+}
+button {
+    background: #6c5ce7;
+    color: #fff;
+    border: none;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 0.04em;
+    transition: background 0.15s;
+}
+button:hover:not(:disabled) { background: #8b7cf7; }
+button:disabled { background: #333; color: #666; cursor: not-allowed; }
+button.ghost {
+    background: #1a1a26;
+    border: 1px solid #2a2a3d;
+    color: #e8e8f0;
+}
+button.ghost:hover:not(:disabled) { background: #222233; }
 button.warn { background: #b45309; }
-pre { background: #12121a; border: 1px solid #2a2a3d; border-radius: 6px; padding: 10px; font-size: 11px; max-height: 340px; overflow: auto; white-space: pre-wrap; word-break: break-word; color: #00ff88; }
+button.warn:hover:not(:disabled) { background: #d97706; }
+
+.tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 12px;
+}
+.tab {
+    flex: 1;
+    padding: 9px 8px;
+    background: #12121a;
+    border: 1px solid #2a2a3d;
+    color: #8888a0;
+    border-radius: 6px;
+    font-weight: 700;
+    font-size: 0.72rem;
+    text-align: center;
+    cursor: pointer;
+    white-space: nowrap;
+    user-select: none;
+}
+.tab.active {
+    background: #6c5ce7;
+    color: #fff;
+    border-color: #6c5ce7;
+}
+.pane { display: none; }
+.pane.active { display: block; }
+
+.row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+.row input { flex: 1; }
+.row button {
+    flex: 0 0 auto;
+    width: auto;
+    padding: 10px 14px;
+}
+
+pre {
+    background: #12121a;
+    border: 1px solid #2a2a3d;
+    border-radius: 6px;
+    padding: 10px;
+    font-size: 11px;
+    max-height: 400px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: #00ff88;
+    font-family: inherit;
+    line-height: 1.5;
+}
 pre.err { color: #ff6b6b; }
-.note { background: #12121a; border-left: 3px solid #ffd700; padding: 8px 10px; font-size: 0.75rem; color: #aaa; margin: 8px 0; border-radius: 4px; }
-.tabs { display: flex; gap: 4px; margin-bottom: 12px; }
-.tab { flex: 1; padding: 8px; background: #12121a; border: 1px solid #2a2a3d; color: #8888a0; border-radius: 6px; font-weight: 700; font-size: 0.75rem; text-align: center; cursor: pointer; }
-.tab.active { background: #6c5ce7; color: #fff; border-color: #6c5ce7; }
-.pane { display: none; } .pane.active { display: block; }
-.row { display: flex; gap: 6px; align-items: center; }
-.row input { flex: 1; } .row button { flex: 0 0 auto; width: auto; padding: 10px 14px; }
+
+.note {
+    background: #12121a;
+    border-left: 3px solid #ffd700;
+    padding: 9px 11px;
+    font-size: 0.72rem;
+    color: #aaa;
+    margin: 8px 0;
+    border-radius: 4px;
+    line-height: 1.55;
+}
+.note strong { color: #ffd700; }
+
+code {
+    background: #1a1a26;
+    padding: 1px 5px;
+    border-radius: 3px;
+    color: #00d2ff;
+    font-size: 0.92em;
+}
 </style>
 </head>
 <body>
 
 <h1>🏆 Scraper Admin</h1>
 
-<div class="row">
+<div class="row" style="margin-bottom:12px;">
     <input id="token" placeholder="SCRAPER_TOKEN" value="openbox2026run">
-    <button class="ghost" onclick="counts()">🔄</button>
+    <button class="ghost" onclick="counts();logs()">🔄</button>
 </div>
 
 <div class="tabs">
-    <div class="tab active" data-tab="tm">Transfermarkt CSV</div>
-    <div class="tab" data-tab="bzz">Bzzoiro (live)</div>
+    <div class="tab active" data-tab="tm">Transfermarkt</div>
+    <div class="tab" data-tab="bzz">Bzzoiro</div>
     <div class="tab" data-tab="db">Database</div>
 </div>
 
-<!-- TRANSFERMARKT -->
+<!-- ═══════════════════════════════════════════════ -->
+<!--  TRANSFERMARKT CSV IMPORT                        -->
+<!-- ═══════════════════════════════════════════════ -->
 <div class="pane active" id="pane-tm">
     <div class="note">
-        Full database. 92,671 players, 2,175 clubs. One import fills everything.
-        Runs 3–10 minutes. Do not close the tab.
+        <strong>Bulk baseline import.</strong> 2,175 clubs and ~74,000 players
+        from <code>salimt/football-datasets</code> on GitHub. One-shot.
+        Takes 3–10 minutes. Youth and reserve squads are filtered out automatically.
     </div>
-    <h3>1. Check dataset</h3>
+
+    <h3>1. Check dataset URLs</h3>
     <button onclick="tmCheck()">Check</button>
     <pre id="tmOut1">—</pre>
+
     <h3>2. Import clubs + players</h3>
     <button onclick="tmImport()" id="tmBtn">⬇️ Import</button>
+    <div class="note">
+        Do not close this tab while running. Progress appears in Render logs.
+        Final response includes total clubs and players written.
+    </div>
     <pre id="tmOut2">—</pre>
 </div>
 
-<!-- BZZOIRO -->
+<!-- ═══════════════════════════════════════════════ -->
+<!--  BZZOIRO LIVE SYNC                               -->
+<!-- ═══════════════════════════════════════════════ -->
 <div class="pane" id="pane-bzz">
     <div class="note">
-        Live squads. Free token at sports.bzzoiro.com/register.
-        Add BZZOIRO_TOKEN env var on Render, then use this tab for updates.
+        <strong>Live squads from Bzzoiro.</strong> 88 leagues worldwide. No rate limits.
+        Requires <code>BZZOIRO_TOKEN</code> env var on Render.
+        Register free at <code>sports.bzzoiro.com/register</code>.
     </div>
+
     <h3>1. Test connection</h3>
     <button onclick="bzzTest()">Test</button>
     <pre id="bzzOut1">—</pre>
-    <h3>2. List leagues</h3>
-    <button onclick="bzzLeagues()">Get leagues</button>
-    <pre id="bzzOut2">—</pre>
-    <h3>3. Sync a league</h3>
+
+    <h3>2. Sync EVERY league (background)</h3>
     <div class="row">
-        <input id="bzzLeagueId" placeholder="League ID" type="number">
-        <button onclick="bzzSync()" id="bzzBtn">Sync</button>
+        <button onclick="bzzSyncAll()" id="bzzAllBtn">🚀 Sync All Leagues</button>
+        <button class="warn" onclick="bzzStop()" id="bzzStopBtn" disabled>⏹ Stop</button>
+    </div>
+    <div class="note">
+        Iterates all 88 leagues, skipping cups, women's, and youth competitions.
+        Runs on the server — you can close this tab and come back later.
+        Progress auto-polls every 3 seconds.
+    </div>
+    <pre id="bzzProgress">—</pre>
+
+    <h3>3. Or sync ONE league by ID</h3>
+    <div class="row">
+        <input id="bzzLeagueId" placeholder="League ID (e.g. 9 = Brasileirão)" type="number">
+        <button onclick="bzzSyncOne()" id="bzzOneBtn">Sync</button>
     </div>
     <pre id="bzzOut3">—</pre>
 </div>
 
-<!-- DB -->
+<!-- ═══════════════════════════════════════════════ -->
+<!--  DATABASE INSPECTION                             -->
+<!-- ═══════════════════════════════════════════════ -->
 <div class="pane" id="pane-db">
     <h3>Current state</h3>
-    <button onclick="counts()">Refresh</button>
+    <button onclick="counts()">🔄 Refresh counts</button>
     <pre id="dbOut">—</pre>
+
     <h3>Sync history</h3>
-    <button onclick="logs()">Refresh</button>
+    <button onclick="logs()">🔄 Refresh logs</button>
     <pre id="dbLogs">—</pre>
+
     <h3>Danger zone</h3>
-    <button class="warn" onclick="wipe()">🗑️ Delete all players</button>
+    <button class="warn" onclick="wipePlayers()">🗑️ Delete all players</button>
     <pre id="dbWipe">—</pre>
 </div>
 
+<!-- ═══════════════════════════════════════════════ -->
+<!--  BOOTSTRAP + LOGIC (inline, self-contained)     -->
+<!-- ═══════════════════════════════════════════════ -->
 <script>
-const $ = id => document.getElementById(id);
-const tok = () => encodeURIComponent($('token').value.trim());
-const out = (id, o, err) => { $(id).textContent = typeof o === 'string' ? o : JSON.stringify(o, null, 2); $(id).className = err ? 'err' : ''; };
+(function () {
+    "use strict";
 
-document.querySelectorAll('.tab').forEach(t => {
-    t.onclick = () => {
-        document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
-        document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
-        t.classList.add('active');
-        $('pane-' + t.dataset.tab).classList.add('active');
-        if (t.dataset.tab === 'db') { counts(); logs(); }
-    };
-});
+    const $ = id => document.getElementById(id);
+    const tok = () => encodeURIComponent(($('token') && $('token').value.trim()) || 'openbox2026run');
 
-async function tmCheck() {
-    out('tmOut1', 'Checking...');
-    try { out('tmOut1', await (await fetch(`/api/admin/tm-check?token=${tok()}`)).json(), !(await true)); }
-    catch (e) { out('tmOut1', 'Error: ' + e.message, true); }
-}
+    function out(id, data, isErr) {
+        const el = $(id);
+        if (!el) return;
+        el.textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+        el.className = isErr ? 'err' : '';
+    }
 
-async function tmImport() {
-    $('tmBtn').disabled = true;
-    out('tmOut2', 'Importing...\nDownloading CSVs from GitHub.\nWill commit every 500 clubs and 2000 players.\nDo not close this tab.');
-    try { out('tmOut2', await (await fetch(`/api/admin/tm-import?token=${tok()}`, { method: 'POST' })).json()); }
-    catch (e) { out('tmOut2', 'Error: ' + e.message, true); }
-    $('tmBtn').disabled = false;
+    async function jget(path) {
+        const r = await fetch(path);
+        const t = await r.text();
+        try { return { ok: r.ok, status: r.status, data: JSON.parse(t) }; }
+        catch { return { ok: r.ok, status: r.status, data: { raw: t.slice(0, 400) } }; }
+    }
+
+    async function jpost(path) {
+        const r = await fetch(path, { method: 'POST' });
+        const t = await r.text();
+        try { return { ok: r.ok, status: r.status, data: JSON.parse(t) }; }
+        catch { return { ok: r.ok, status: r.status, data: { raw: t.slice(0, 400) } }; }
+    }
+
+    // ─── Tab switching ───
+    document.querySelectorAll('.tab').forEach(t => {
+        t.addEventListener('click', () => {
+            document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+            document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
+            t.classList.add('active');
+            const pane = $('pane-' + t.dataset.tab);
+            if (pane) pane.classList.add('active');
+            if (t.dataset.tab === 'db') { counts(); logs(); }
+            if (t.dataset.tab === 'bzz') { pollProgress(); }
+        });
+    });
+
+    // ═══════════════════════════════════════════════
+    //  TRANSFERMARKT
+    // ═══════════════════════════════════════════════
+    async function tmCheck() {
+        out('tmOut1', 'Checking URLs...');
+        try {
+            const r = await jget(`/api/admin/tm-check?token=${tok()}`);
+            out('tmOut1', r.data, !r.ok);
+        } catch (e) { out('tmOut1', 'Error: ' + e.message, true); }
+    }
+
+    async function tmImport() {
+        const btn = $('tmBtn');
+        if (!confirm('Import 2,175 clubs and ~74,000 players?\n\nTakes 3-10 minutes. Do NOT close this tab.')) return;
+        btn.disabled = true;
+        const orig = btn.textContent;
+        btn.textContent = '⏳ Importing... (3-10 min)';
+        out('tmOut2', 'Downloading CSVs from GitHub...\nCommits every 500 clubs and 2000 players.\nWatch Render logs for progress.');
+
+        const started = Date.now();
+        try {
+            const r = await jpost(`/api/admin/tm-import?token=${tok()}`);
+            const dur = ((Date.now() - started) / 1000).toFixed(1);
+            out('tmOut2', `Duration: ${dur}s\n\n` + JSON.stringify(r.data, null, 2), !r.ok);
+        } catch (e) {
+            out('tmOut2', 'Error: ' + e.message, true);
+        }
+        btn.disabled = false;
+        btn.textContent = orig;
+        counts();
+    }
+
+    // ═══════════════════════════════════════════════
+    //  BZZOIRO
+    // ═══════════════════════════════════════════════
+    let progressTimer = null;
+
+    async function bzzTest() {
+        out('bzzOut1', 'Testing connection...');
+        try {
+            const r = await jget(`/api/admin/bzz-test?token=${tok()}`);
+            const d = r.data;
+            if (d && d.body && d.body.results) {
+                out('bzzOut1', {
+                    status: d.status,
+                    total_leagues: d.body.count,
+                    first_few: d.body.results.slice(0, 5).map(l => ({
+                        id: l.id,
+                        name: l.name,
+                        country: l.country,
+                        current_season: l.current_season ? l.current_season.name : null
+                    }))
+                });
+            } else {
+                out('bzzOut1', d, !r.ok);
+            }
+        } catch (e) { out('bzzOut1', 'Error: ' + e.message, true); }
+    }
+
+    async function bzzSyncAll() {
+        if (!confirm('Sync ALL Bzzoiro leagues in the background?\n\nIterates every active domestic league. Skips cups, women, youth.\nRuns server-side — you can close this tab.')) return;
+
+        const startBtn = $('bzzAllBtn');
+        const stopBtn = $('bzzStopBtn');
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+
+        out('bzzProgress', 'Launching background sync...');
+        try {
+            const r = await jget(`/api/admin/bzz-sync-all?token=${tok()}`);
+            out('bzzProgress', r.data);
+            if (r.ok) {
+                if (progressTimer) clearInterval(progressTimer);
+                progressTimer = setInterval(pollProgress, 3000);
+                setTimeout(pollProgress, 800);
+            } else {
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+            }
+        } catch (e) {
+            out('bzzProgress', 'Error: ' + e.message, true);
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+        }
+    }
+
+    async function pollProgress() {
+        try {
+            const r = await jget(`/api/admin/bzz-progress?token=${tok()}`);
+            if (!r.ok) return;
+            renderProgress(r.data);
+            if (!r.data.running) {
+                if (progressTimer) { clearInterval(progressTimer); progressTimer = null; }
+                $('bzzAllBtn').disabled = false;
+                $('bzzStopBtn').disabled = true;
+                counts();
+            }
+        } catch (e) { /* silent */ }
+    }
+
+    function renderProgress(s) {
+        const completed = s.leagues_completed || [];
+        const skipped = s.leagues_skipped || [];
+        const errors = s.errors || [];
+
+        const lines = [
+            `STATUS:    ${s.running ? '🟢 RUNNING' : '⚪ idle'}`,
+            `PROGRESS:  ${s.current_index || 0} / ${s.total_leagues || 0}`,
+            `CURRENT:   ${s.current_league_name || '—'}`,
+            ``,
+            `CLUBS:     ${s.clubs_written || 0}`,
+            `PLAYERS:   ${s.players_written || 0}`,
+            `DONE:      ${completed.length} leagues`,
+            `SKIPPED:   ${skipped.length} leagues`,
+            `ERRORS:    ${errors.length}`
+        ];
+
+        if (s.started_at) {
+            const end = s.finished_at || (Date.now() / 1000);
+            const elapsed = Math.floor(end - s.started_at);
+            const m = Math.floor(elapsed / 60);
+            const sec = elapsed % 60;
+            lines.push('');
+            lines.push(`ELAPSED:   ${m}m ${sec}s`);
+        }
+
+        if (completed.length) {
+            lines.push('');
+            lines.push('LAST 8 COMPLETED:');
+            completed.slice(-8).forEach(l => {
+                lines.push(`  ${String(l.id).padStart(4)} · ${l.name} → ${l.clubs}c / ${l.players}p`);
+            });
+        }
+
+        if (skipped.length) {
+            lines.push('');
+            lines.push('SKIPPED (first 5):');
+            skipped.slice(0, 5).forEach(l => {
+                lines.push(`  ${String(l.id).padStart(4)} · ${l.name} — ${l.reason || 'filtered'}`);
+            });
+        }
+
+        if (errors.length) {
+            lines.push('');
+            lines.push('RECENT ERRORS:');
+            errors.slice(-5).forEach(e => lines.push(`  ⚠ ${e}`));
+        }
+
+        out('bzzProgress', lines.join('\n'));
+    }
+
+    async function bzzStop() {
+        if (!confirm('Stop the background sync? Finishes the current team first.')) return;
+        try {
+            const r = await jget(`/api/admin/bzz-stop?token=${tok()}`);
+            out('bzzProgress', 'Stop requested. ' + JSON.stringify(r.data));
+        } catch (e) { out('bzzProgress', 'Error: ' + e.message, true); }
+    }
+
+    async function bzzSyncOne() {
+        const lid = $('bzzLeagueId').value;
+        if (!lid) return alert('Enter a league ID');
+        const btn = $('bzzOneBtn');
+        btn.disabled = true;
+        out('bzzOut3', `Syncing league ${lid}...`);
+        const started = Date.now();
+        try {
+            const r = await jget(`/api/admin/bzz-sync?token=${tok()}&league_id=${lid}`);
+            const dur = ((Date.now() - started) / 1000).toFixed(1);
+            out('bzzOut3', `Duration: ${dur}s\n\n` + JSON.stringify(r.data, null, 2), !r.ok);
+        } catch (e) {
+            out('bzzOut3', 'Error: ' + e.message, true);
+        }
+        btn.disabled = false;
+        counts();
+    }
+
+    // ═══════════════════════════════════════════════
+    //  DATABASE
+    // ═══════════════════════════════════════════════
+    async function counts() {
+        try {
+            const r = await jget(`/api/admin/db-counts?token=${tok()}`);
+            if (!r.ok) { out('dbOut', r.data, true); return; }
+            const d = r.data;
+            const lines = [
+                `Clubs:     ${d.clubs_total || 0}`,
+                `Players:   ${d.players_total || 0}`,
+                `Transfers: ${d.transfers_total || 0}`,
+                ``,
+                `BY TOURNAMENT (clubs / players):`
+            ];
+            const keys = new Set([
+                ...Object.keys(d.clubs_by_tournament || {}),
+                ...Object.keys(d.players_by_tournament || {})
+            ]);
+            Array.from(keys).sort().forEach(k => {
+                const c = (d.clubs_by_tournament || {})[k] || 0;
+                const p = (d.players_by_tournament || {})[k] || 0;
+                lines.push(`  ${String(k).padEnd(14)} ${String(c).padStart(5)} / ${String(p).padStart(6)}`);
+            });
+            out('dbOut', lines.join('\n'));
+        } catch (e) { out('dbOut', 'Error: ' + e.message, true); }
+    }
+
+    async function logs() {
+        try {
+            const r = await jget(`/api/admin/db-logs?token=${tok()}`);
+            if (!r.ok) { out('dbLogs', r.data, true); return; }
+            const items = r.data.logs || [];
+            if (!items.length) { out('dbLogs', 'No sync history yet.'); return; }
+            const lines = items.map(l => {
+                const when = new Date((l.ran_at || 0) * 1000).toLocaleString();
+                return `${when}  [${l.status}]  ${l.task}  count=${l.count}  ${l.message || ''}`;
+            });
+            out('dbLogs', lines.join('\n'));
+        } catch (e) { out('dbLogs', 'Error: ' + e.message, true); }
+    }
+
+    async function wipePlayers() {
+        if (!confirm('Delete ALL players from Neon?\n\nClubs stay. Cannot be undone.')) return;
+        if (!confirm('Really sure? Final confirmation.')) return;
+        try {
+            const r = await jpost(`/api/admin/db-wipe-players?token=${tok()}`);
+            out('dbWipe', r.data, !r.ok);
+        } catch (e) { out('dbWipe', 'Error: ' + e.message, true); }
+        counts();
+    }
+
+    // ═══════════════════════════════════════════════
+    //  BOOTSTRAP
+    // ═══════════════════════════════════════════════
+    const saved = localStorage.getItem('admin_token');
+    if (saved && $('token')) $('token').value = saved;
+    if ($('token')) {
+        $('token').addEventListener('change', () => {
+            localStorage.setItem('admin_token', $('token').value.trim());
+        });
+    }
+
     counts();
-}
+    logs();
 
-async function bzzTest() {
-    out('bzzOut1', 'Testing...');
-    try { out('bzzOut1', await (await fetch(`/api/admin/bzz-test?token=${tok()}`)).json()); }
-    catch (e) { out('bzzOut1', 'Error: ' + e.message, true); }
-}
+    // Auto-detect running sync on page load
+    setTimeout(async () => {
+        try {
+            const r = await jget(`/api/admin/bzz-progress?token=${tok()}`);
+            if (r.ok && r.data.running) {
+                $('bzzAllBtn').disabled = true;
+                $('bzzStopBtn').disabled = false;
+                if (progressTimer) clearInterval(progressTimer);
+                progressTimer = setInterval(pollProgress, 3000);
+                pollProgress();
+            }
+        } catch (e) { /* silent */ }
+    }, 900);
 
-async function bzzLeagues() {
-    out('bzzOut2', 'Loading...');
-    try { out('bzzOut2', await (await fetch(`/api/admin/bzz-leagues?token=${tok()}`)).json()); }
-    catch (e) { out('bzzOut2', 'Error: ' + e.message, true); }
-}
-
-async function bzzSync() {
-    const lid = $('bzzLeagueId').value;
-    if (!lid) return alert('Enter a league ID');
-    $('bzzBtn').disabled = true;
-    out('bzzOut3', 'Syncing league ' + lid + '...');
-    try { out('bzzOut3', await (await fetch(`/api/admin/bzz-sync?token=${tok()}&league_id=${lid}`)).json()); }
-    catch (e) { out('bzzOut3', 'Error: ' + e.message, true); }
-    $('bzzBtn').disabled = false;
-    counts();
-}
-
-async function counts() {
-    try { out('dbOut', await (await fetch(`/api/admin/db-counts?token=${tok()}`)).json()); }
-    catch (e) { out('dbOut', 'Error: ' + e.message, true); }
-}
-async function logs() {
-    try { out('dbLogs', await (await fetch(`/api/admin/db-logs?token=${tok()}`)).json()); }
-    catch (e) { out('dbLogs', 'Error: ' + e.message, true); }
-}
-async function wipe() {
-    if (!confirm('Delete all players?')) return;
-    try { out('dbWipe', await (await fetch(`/api/admin/db-wipe-players?token=${tok()}`, { method: 'POST' })).json()); }
-    catch (e) { out('dbWipe', 'Error: ' + e.message, true); }
-    counts();
-}
-
-counts(); logs();
+    // Expose for inline onclick
+    window.tmCheck = tmCheck;
+    window.tmImport = tmImport;
+    window.bzzTest = bzzTest;
+    window.bzzSyncAll = bzzSyncAll;
+    window.bzzSyncOne = bzzSyncOne;
+    window.bzzStop = bzzStop;
+    window.counts = counts;
+    window.logs = logs;
+    window.wipePlayers = wipePlayers;
+    window.pollProgress = pollProgress;
+})();
 </script>
 </body>
 </html>
