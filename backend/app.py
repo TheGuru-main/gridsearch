@@ -609,7 +609,7 @@ def tm_check(request: Request):
     ]
     out = []
     try:
-        with httpx.Client(timeout=30, follow_redirects=True) as c:
+        with httpx.Client(timeout=60, follow_redirects=True) as c:
             for u in urls:
                 r = c.head(u)
                 size = int(r.headers.get("content-length") or 0)
@@ -621,7 +621,6 @@ def tm_check(request: Request):
         return {"sources": out, "all_ok": all(x["status"] == 200 for x in out)}
     except Exception as e:
         return {"error": str(e)}
-
 
 @app.post("/api/admin/tm-import")
 def tm_import_ep(request: Request):
