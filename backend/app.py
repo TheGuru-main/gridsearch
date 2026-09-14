@@ -1,4 +1,4 @@
-"""
+b"""
 GSP OpenBox + Fantasy — combined backend.
 - Auth: SQLite users, 1070 byflints at signup
 - Wallet: ledger-backed balance
@@ -16,7 +16,7 @@ from pydantic import BaseModel
 
 from bubblejumbo_middleware import BubbleJumboMiddleware, bj_bridge
 
-DB_PATH = Path("storage/transfers.db")
+DB_PATH = Path(__file__).resolve().parent / "storage" / "transfers.db"
 UPLOAD_DIR = Path("storage/uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
