@@ -16,11 +16,8 @@ OpenBox.Storage = {
         }
     },
     setItem: function (key, value) {
-        try {
-            localStorage.setItem(key, JSON.stringify(value));
-        } catch (e) {
-            console.warn('[storage] setItem failed for', key, e);
-        }
+        try { localStorage.setItem(key, JSON.stringify(value)); }
+        catch (e) { console.warn('[storage] setItem failed for', key, e); }
     },
     removeItem: function (key) {
         try { localStorage.removeItem(key); } catch (e) {}
