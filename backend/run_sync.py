@@ -1,22 +1,27 @@
 """
-Full sync: SportMonks (primary) → Wikipedia (fallback) → RSS (rumors).
-Run every 6 hours via cron / Render cron job.
+Full sync entry point. Run from Render Cron Job every 6 hours.
 """
+import sys
 import asyncio
-from storage import init_db
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from database import init_db
 from sportmonks_sync import run as sm_run
 from wikipedia_transfers import run as wiki_run
 from rss_transfers import run as rss_run
 
 
 async def main():
-    conn = init_db()
+    print("=== init DB ===")
+    init_db()
     print("=== SportMonks ===")
-    await sm_run(conn)
+    await sm_run()
     print("=== Wikipedia ===")
-    wiki_run(conn)
+    wiki_run()
     print("=== RSS ===")
-    rss_run(conn)
+    rss_run()
     print("Done.")
 
 
