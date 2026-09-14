@@ -538,7 +538,6 @@ def admin_scraper_diag(request: Request):
 
     return report
 
-
 # ═══════════════════════════════════════════════════════
 #  ADMIN — Bzzoiro (live squads)
 # ═══════════════════════════════════════════════════════
@@ -580,4 +579,126 @@ def bzz_leagues(request: Request):
                 for l in results
             ],
         }
-    
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/admin/bzz-sync")
+def bzz_sync_ep(request: Request):
+    _admin_guard(request)
+    lid = request.query_params.get("league_id", "")
+    if not lid:
+        raise HTTPException(400, "league_id required")
+    try:
+        from bzz_sync import sync_league
+        return sync_league(int(lid))
+    except Exception as e:
+        import traceback
+        return {"ok": False, "error": str(e), "traceback": traceback.format_exc()}
+
+
+# ═══════════════════════════════════════════════════════
+#  ADMIN — Transfermarkt CSV (bulk import)
+# ═══════════════════════════════════════════════════════
+@app.get("/api/admin/tm-check")
+def tm_check(request: Request):
+    _admin_guard(request)
+    urls = [
+        "https://raw.githubusercontent.com/salimt/football-datasets/main/datalake/transfermarkt/team_details/team_details.csv",
+        "https://raw.githubusercontent.com/salimt/football-datasets/main/datalake/transfermarkt/player_profiles/player_profiles.csv",
+    ]
+    out = []
+    try:
+        with httpx.Client(timeout=20, follow_redirects=True) as c:
+            for u in urls:
+                r = c.head(u)
+                out.append({
+                    "url": u.split("/")[-1],
+                    "status": r.status_code,
+                    "size_bytes": r.headers.get("content-length"),
+                })
+        return {"sources": out, "all_ok": all(x["status"] == 200 for x in out)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/admin/tm-import")
+def tm_import_ep(request: Request):
+    _admin_guard(request)
+    try:
+        from tm_import import import_all
+        return import_all()
+    except Exception as e:
+        import traceback
+        return {"ok": False, "error": str(e), "traceback": traceback.format_exc()}
+
+
+# ═══════════════════════════════════════════════════════
+#  ADMIN — DB inspection
+# ═══════════════════════════════════════════════════════
+@app.get("/api/admin/db-counts")
+def db_counts(request: Request):
+    _admin_guard(request)
+    from collections import Counter
+    db = SessionLocal()
+    try:
+        clubs = db.query(Club).all()
+        players = db.query(Player).all()
+        transfers = db.query(Transfer).count()
+        return {
+            "clubs_total": len(clubs),
+            "players_total": len(players),
+            "transfers_total": transfers,
+            "clubs_by_tournament": dict(Counter(c.tournament_id for c in clubs)),
+            "players_by_tournament": dict(Counter(p.tournament_id for p in players)),
+        }
+    finally:
+        db.close()
+
+
+@app.get("/api/admin/db-logs")
+def db_logs(request: Request):
+    _admin_guard(request)
+    db = SessionLocal()
+    try:
+        rows = db.query(SyncLog).order_by(SyncLog.ran_at.desc()).limit(30).all()
+        return {"logs": [
+            {"task": r.task, "status": r.status, "count": r.count,
+             "message": r.message, "ran_at": r.ran_at}
+            for r in rows
+        ]}
+    finally:
+        db.close()
+
+
+@app.post("/api/admin/db-wipe-players")
+def db_wipe_players(request: Request):
+    _admin_guard(request)
+    db = SessionLocal()
+    try:
+        n = db.query(Player).delete()
+        db.commit()
+        return {"ok": True, "deleted": n}
+    finally:
+        db.close()
+
+
+@app.post("/api/admin/db-wipe-all")
+def db_wipe_all(request: Request):
+    _admin_guard(request)
+    db = SessionLocal()
+    try:
+        p = db.query(Player).delete()
+        c = db.query(Club).delete()
+        t = db.query(Transfer).delete()
+        db.commit()
+        return {"ok": True, "players": p, "clubs": c, "transfers": t}
+    finally:
+        db.close()
+
+
+# ═══════════════════════════════════════════════════════
+#  STATIC — m
+feed front
+# ═══════════════════════════════════════════════════════
+app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
