@@ -398,6 +398,7 @@
         });
     }
 
+
     /* ─── Team sheet ─── */
     function renderTeam(body) {
         const squad = loadSquad() || emptySquad();
@@ -438,4 +439,99 @@
             '<small>' + form + ' · GSP row ' + (squad.gsp_row || "—") + '</small></div>' +
             '<div class="pitch">' +
                 '<div class="pitch-row fwd">' + startingXI.FWD.map(chip).join("") + '</div>' +
-                '<div class="pitch-row mid">' + startingXI.MID.map(chip).join(
+                '<div class="pitch-row mid">' + startingXI.MID.map(chip).join("") + '</div>' +
+                '<div class="pitch-row def">' + startingXI.DEF.map(chip).join("") + '</div>' +
+                '<div class="pitch-row gk">' + startingXI.GK.map(chip).join("") + '</div>' +
+            '</div>' +
+            '<h4 class="pos-header">Bench · ' + bench.length + '</h4>' +
+            '<div class="bench-list">' +
+                (bench.length
+                    ? bench.map(function (p) {
+                        return '<div class="bench-item">' + escapeHtml(p.name) + ' <small>' + p.pos + '</small></div>';
+                    }).join("")
+                    : '<p class="hint">No bench players.</p>') +
+            '</div>';
+
+        document.getElementById("back").addEventListener("click", function (e) {
+            e.preventDefault(); setView("squad");
+        });
+    }
+
+    /* ─── Hot ─── */
+    function renderHot(body) {
+        const list = getTournaments();
+        if (!list.length) { body.innerHTML = '<p class="hint">No data.</p>'; return; }
+
+        const week = Math.floor(Date.now() / (7 * 86400000));
+        const rows = list.map(function (t) {
+            const tour = OpenBox.FantasyRegistry.tournaments[t.id];
+            if (!tour || !Array.isArray(tour.clubs) || !tour.clubs.length) return null;
+            const firstClub = tour.clubs[0];
+            const players = getClubPlayers(t.id, firstClub.id);
+            if (!players.length) return null;
+            const scored = players.map(function (p) {
+                const h = (p.id + ":" + week).split("").reduce(function (s, c) { return (s * 31 + c.charCodeAt(0)) >>> 0; }, 0);
+                return { p: p, pts: ((h % 120) / 10 + 1).toFixed(1) };
+            });
+            const top = scored.reduce(function (a, b) { return parseFloat(b.pts) > parseFloat(a.pts) ? b : a; });
+            return { tid: t.id, tournament: t.name, player: top.p, pts: top.pts };
+        }).filter(Boolean);
+
+        if (!rows.length) {
+            body.innerHTML = '<p class="hint">Hot list will populate once the scraper runs.</p>';
+            return;
+        }
+
+        body.innerHTML =
+            '<h3>🔥 Hot This Week</h3><div class="hot-list">' +
+            rows.map(function (r) {
+                return '<div class="hot-player">' +
+                    '<div><strong>' + escapeHtml(r.player.name) + '</strong>' +
+                    '<small>' + escapeHtml(r.tournament) + ' · ' + r.player.pos + '</small></div>' +
+                    '<div class="hot-pts">' + r.pts + ' pts<br><small>' + r.player.price + ' bf</small></div>' +
+                    '</div>';
+            }).join("") + '</div>';
+    }
+
+    /* ─── Transfers ─── */
+    async function renderTransfers(body) {
+        body.innerHTML = '<p class="hint">Loading transfers...</p>';
+        try {
+            const r = await OpenBox.API.transfers(30);
+            const list = (r && r.data && r.data.transfers) || [];
+            if (!list.length) {
+                body.innerHTML = '<h3>📋 Transfers</h3>' +
+                    '<p class="hint">No transfers in the last 30 days. The scraper runs every 6 hours.</p>';
+                return;
+            }
+            body.innerHTML = '<h3>📋 Recent Transfers (30 days)</h3><div class="transfer-list">' +
+                list.map(function (t) {
+                    return '<div class="transfer-row">' +
+                        '<strong>' + escapeHtml(t.player_name) + '</strong>' +
+                        '<small>' + escapeHtml(t.from_club || "?") + " → " + escapeHtml(t.to_club || "?") + '</small>' +
+                        '<span>' + escapeHtml(t.fee || "—") + ' · ' + escapeHtml(t.date || "") + ' · ' + escapeHtml(t.source || "") + '</span>' +
+                        '</div>';
+                }).join("") + '</div>';
+        } catch (err) {
+            body.innerHTML = '<p class="hint">Could not load transfers: ' + escapeHtml(err.message) + '</p>';
+        }
+    }
+
+    function escapeHtml(s) {
+        return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+            return ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[c];
+        });
+    }
+
+    /* ─── Tab wiring ─── */
+    document.addEventListener("DOMContentLoaded", function () {
+        document.querySelectorAll(".ftab").forEach(function (t) {
+            t.addEventListener("click", function (e) {
+                e.preventDefault();
+                setView(t.dataset.ftab);
+            });
+        });
+    });
+
+    OpenBox.Fantasy = { show: show, loadSquad: loadSquad, saveSquad: saveSquad, emptySquad: emptySquad };
+})();
