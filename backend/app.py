@@ -421,5 +421,28 @@ def hot_players(db: Session = Depends(get_db)):
 def health():
     return {"ok": True, "gameweek": current_gameweek()}
 
+# ═══════════════════════════════════════════════════════
+#  ADMIN — run the scraper on demand
+# ═══════════════════════════════════════════════════════
+SCRAPER_TOKEN = os.environ.get("SCRAPER_TOKEN", "CHANGE_ME")
+
+@app.get("/api/admin/run-scraper")
+def admin_run_scraper(request: Request):
+    if request.query_params.get("token", "") != SCRAPER_TOKEN:
+        raise HTTPException(403, "Forbidden")
+    import threading, sys, asyncio
+    from pathlib import Path
+
+    def _run():
+        try:
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            from run_sync import main as sync_main
+            asyncio.run(sync_main())
+            print("[admin] scraper finished")
+        except Exception as e:
+            print("[admin] scraper failed:", e)
+
+    threading.Thread(target=_run, daemon=True).start()
+    return {"ok": True, "message": "Scraper started. Watch Render logs."}
 
 app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
