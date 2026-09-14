@@ -1,14 +1,16 @@
 """
 GSP OpenBox + Fantasy — combined backend.
-- Auth: SQLite users, 1070 byflints at signup
-- Wallet: ledger-backed balance
-- OpenBox items: 4-column grid (row always 1)
-- Fantasy: tournaments, players, transfers, hot list
+- Auth, wallet, OpenBox items, fantasy
+- Multi-source scraper admin (Transfermarkt CSV + Bzzoiro)
+- News via GNews
 - BubbleJumbo middleware wraps everything
 """
-import os, time, uuid, hashlib
+import os
+import time
+import uuid
+import hashlib
+import httpx
 from pathlib import Path
-import httpx, csv, io, time as _time
 from typing import Optional
 from fastapi import FastAPI, Request, HTTPException, Depends, UploadFile, File, Form
 from fastapi.responses import JSONResponse, FileResponse
@@ -16,8 +18,11 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from database import get_db, init_db
-from models import User, SessionToken, LedgerEntry, OpenBoxItem, Club, Player, Transfer, SyncLog
+from database import get_db, init_db, SessionLocal
+from models import (
+    User, SessionToken, LedgerEntry, OpenBoxItem,
+    Club, Player, Transfer, SyncLog
+)
 from bubblejumbo_middleware import BubbleJumboMiddleware, bj_bridge
 
 # ═══════════════════════════════════════════════════════
@@ -47,14 +52,21 @@ TOURNAMENT_BASE = {
     "worldcup": 1000, "afcon": 800, "euro": 900, "copa_america": 800,
 }
 
-POSITION_BONUS = {"GK": 23.5, "DEF": 35, "MID": 40, "FWD": 60,
-                  "Goalkeeper": 23.5, "Defender": 35, "Midfielder": 40, "Attacker": 60}
+POSITION_BONUS = {
+    "GK": 23.5, "DEF": 35, "MID": 40, "FWD": 60,
+    "Goalkeeper": 23.5, "Defender": 35, "Midfielder": 40, "Attacker": 60,
+}
 
 CATEGORY_COL = {"app": 0, "game": 1, "video": 2, "other": 3}
 
 UPLOAD_FEE = {"app": 200000, "game": 200000, "video": 150000, "other": 0}
 DOWNLOAD_FEE = 3000
 UPLOADER_SHARE = 3000
+
+SCRAPER_TOKEN = os.environ.get("SCRAPER_TOKEN", "openbox2026run")
+GNEWS_KEY = os.environ.get("GNEWS_KEY", "")
+BZZ_BASE = "https://sports.bzzoiro.com/api/v2"
+
 
 # ═══════════════════════════════════════════════════════
 #  HELPERS
@@ -64,7 +76,8 @@ def hash_password(p: str) -> str:
 
 
 def current_gameweek() -> int:
-    epoch = time.mktime(time.strptime("2026-26-01", "%Y-%m-%d"))
+    # FIX: was "2026-26-01" — invalid month
+    epoch = time.mktime(time.strptime("2026-01-01", "%Y-%m-%d"))
     return int((time.time() - epoch) // (7 * 86400)) + 1
 
 
@@ -108,6 +121,16 @@ def balance(db: Session, phone: str) -> float:
     return float(user.byflints) if user else 0.0
 
 
+def _bzz_headers():
+    t = os.environ.get("BZZOIRO_TOKEN", "")
+    return {"Authorization": f"Token {t}"} if t else {}
+
+
+def _admin_guard(request: Request):
+    if request.query_params.get("token", "") != SCRAPER_TOKEN:
+        raise HTTPException(403, "Forbidden")
+
+
 # ═══════════════════════════════════════════════════════
 #  FASTAPI APP
 # ═══════════════════════════════════════════════════════
@@ -122,7 +145,7 @@ def on_startup():
 
 
 # ═══════════════════════════════════════════════════════
-#  MODELS
+#  PYDANTIC MODELS
 # ═══════════════════════════════════════════════════════
 class SignupReq(BaseModel):
     full_name: str
@@ -132,6 +155,7 @@ class SignupReq(BaseModel):
     dob: str
     talent: str
     country: str
+
 
 class LoginReq(BaseModel):
     phone: str
@@ -212,7 +236,8 @@ def me(request: Request, db: Session = Depends(get_db)):
 @app.get("/api/wallet")
 def wallet(request: Request, db: Session = Depends(get_db)):
     user = require_user(request, db)
-    rows = db.query(LedgerEntry).filter_by(phone=user.phone).order_by(LedgerEntry.created_at.desc()).limit(200).all()
+    rows = db.query(LedgerEntry).filter_by(phone=user.phone)\
+        .order_by(LedgerEntry.created_at.desc()).limit(200).all()
     return {
         "balance": user.byflints,
         "ledger": [
@@ -342,9 +367,7 @@ def ob_file(item_id: str, request: Request, db: Session = Depends(get_db)):
 def tournaments(db: Session = Depends(get_db)):
     from sqlalchemy import func
     rows = db.query(Club.tournament_id, func.count(Club.id)).group_by(Club.tournament_id).all()
-    return {"tournaments": [
-        {"tournament_id": tid, "club_count": cnt} for tid, cnt in rows
-    ]}
+    return {"tournaments": [{"tournament_id": tid, "club_count": cnt} for tid, cnt in rows]}
 
 
 @app.get("/api/fantasy/tournaments/{tid}")
@@ -381,7 +404,8 @@ def club_players(club_id: str, db: Session = Depends(get_db)):
 def transfers(days: int = 30, db: Session = Depends(get_db)):
     from datetime import datetime, timedelta
     cutoff = (datetime.utcnow() - timedelta(days=days)).date().isoformat()
-    rows = db.query(Transfer).filter(Transfer.date >= cutoff).order_by(Transfer.date.desc()).limit(200).all()
+    rows = db.query(Transfer).filter(Transfer.date >= cutoff)\
+        .order_by(Transfer.date.desc()).limit(200).all()
     return {"transfers": [
         {
             "player_name": r.player_name, "from_club": r.from_club,
@@ -416,36 +440,75 @@ def hot_players(db: Session = Depends(get_db)):
 
 
 # ═══════════════════════════════════════════════════════
-#  HEALTH + STATIC
+#  NEWS — proxied from GNews with 15-min in-memory cache
+# ═══════════════════════════════════════════════════════
+_news_cache = {"at": 0, "items": []}
+
+
+@app.get("/api/news")
+def get_news(category: str = "sports", limit: int = 25):
+    if not GNEWS_KEY:
+        return {"news": [], "note": "GNEWS_KEY not set on server. Add it to Render environment."}
+
+    now = time.time()
+    if now - _news_cache["at"] < 900 and _news_cache["items"]:
+        return {"news": _news_cache["items"][:limit]}
+
+    try:
+        with httpx.Client(timeout=15) as c:
+            r = c.get("https://gnews.io/api/v4/top-headlines", params={
+                "category": category,
+                "lang": "en",
+                "max": 25,
+                "apikey": GNEWS_KEY,
+            })
+            data = r.json()
+            if "errors" in data or "error" in data:
+                return {"news": [], "error": str(data.get("errors") or data.get("error"))}
+            items = []
+            for a in data.get("articles", []):
+                items.append({
+                    "title": a.get("title"),
+                    "description": a.get("description"),
+                    "url": a.get("url"),
+                    "image": a.get("image"),
+                    "source": (a.get("source") or {}).get("name"),
+                    "published_at": a.get("publishedAt"),
+                    "content": a.get("content"),
+                })
+            _news_cache["items"] = items
+            _news_cache["at"] = now
+            return {"news": items[:limit]}
+    except Exception as e:
+        return {"news": [], "error": str(e)}
+
+
+# ═══════════════════════════════════════════════════════
+#  HEALTH
 # ═══════════════════════════════════════════════════════
 @app.get("/api/health")
 def health():
     return {"ok": True, "gameweek": current_gameweek()}
 
-# ═══════════════════════════════════════════════════════
-#  ADMIN — run the scraper on demand
-# ═══════════════════════════════════════════════════════
-SCRAPER_TOKEN = os.environ.get("SCRAPER_TOKEN", "CHANGE_ME")
 
+# ═══════════════════════════════════════════════════════
+#  ADMIN — scraper environment diagnostic
+# ═══════════════════════════════════════════════════════
 @app.get("/api/admin/scraper-diag")
 def admin_scraper_diag(request: Request):
-    """Report what the scraper environment looks like. No side effects."""
-    if request.query_params.get("token", "") != SCRAPER_TOKEN:
-        raise HTTPException(403, "Forbidden")
+    _admin_guard(request)
 
-    report = {"env": {}, "imports": {}, "db": {}}
+    report = {"env": {}, "imports": {}}
 
-    # Env vars
     report["env"]["DATABASE_URL_set"] = bool(os.environ.get("DATABASE_URL"))
-    report["env"]["SPORTMONKS_KEY_set"] = bool(os.environ.get("SPORTMONKS_KEY"))
-    report["env"]["GNEWS_KEY_set"] = bool(os.environ.get("GNEWS_KEY"))
+    report["env"]["GNEWS_KEY_set"] = bool(GNEWS_KEY)
+    report["env"]["BZZOIRO_TOKEN_set"] = bool(os.environ.get("BZZOIRO_TOKEN"))
     report["env"]["SCRAPER_TOKEN_set"] = bool(os.environ.get("SCRAPER_TOKEN"))
 
-    # Imports
     try:
         from database import engine
         report["imports"]["database"] = "ok"
-        report["db"]["url_prefix"] = str(engine.url).split("@")[-1] if "@" in str(engine.url) else "?"
+        report["db_host"] = str(engine.url).split("@")[-1] if "@" in str(engine.url) else "?"
     except Exception as e:
         report["imports"]["database"] = f"FAIL: {e}"
 
@@ -456,21 +519,19 @@ def admin_scraper_diag(request: Request):
         report["imports"]["models"] = f"FAIL: {e}"
 
     try:
-        from run_sync import main as sync_main
-        report["imports"]["run_sync"] = "ok"
+        import tm_import
+        report["imports"]["tm_import"] = "ok"
     except Exception as e:
-        report["imports"]["run_sync"] = f"FAIL: {e}"
+        report["imports"]["tm_import"] = f"FAIL: {e}"
 
     try:
-        from config import SPORTMONKS_KEY, LEAGUES
-        report["imports"]["config"] = "ok"
-        report["env"]["leagues_count"] = len(LEAGUES)
+        import bzz_sync
+        report["imports"]["bzz_sync"] = "ok"
     except Exception as e:
-        report["imports"]["config"] = f"FAIL: {e}"
+        report["imports"]["bzz_sync"] = f"FAIL: {e}"
 
     try:
-        import httpx, feedparser
-        from bs4 import BeautifulSoup
+        import httpx, csv
         report["imports"]["deps"] = "ok"
     except Exception as e:
         report["imports"]["deps"] = f"FAIL: {e}"
@@ -478,202 +539,45 @@ def admin_scraper_diag(request: Request):
     return report
 
 
-@app.get("/api/admin/run-scraper")
-def admin_run_scraper(request: Request):
-    """Runs the scraper synchronously so errors come back in the HTTP response."""
-    if request.query_params.get("token", "") != SCRAPER_TOKEN:
-        raise HTTPException(403, "Forbidden")
-
-    import sys, asyncio
-    from pathlib import Path
-
-    # Make sure sibling modules are importable
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-
-    out_lines = []
-
-    def log(msg):
-        out_lines.append(str(msg))
-        print("[scraper]", msg, flush=True)
-
-    try:
-        log("importing run_sync...")
-        from run_sync import main as sync_main
-
-        log("starting sync (this may take minutes)...")
-        # Fire the actual run
-        asyncio.run(sync_main())
-        log("sync completed")
-
-        return {"ok": True, "output": out_lines}
-
-    except Exception as e:
-        import traceback
-        tb = traceback.format_exc()
-        log("EXCEPTION: " + str(e))
-        return JSONResponse(
-            status_code=500,
-            content={"ok": False, "error": str(e), "traceback": tb, "output": out_lines}
-        )
-
 # ═══════════════════════════════════════════════════════
-#  SPORTMONKS ADMIN — run scraper one league at a time
+#  ADMIN — Bzzoiro (live squads)
 # ═══════════════════════════════════════════════════════
-from config import LEAGUES as SP_LEAGUES
-
-@app.get("/api/admin/sp-test")
-def sp_test(request: Request):
-    """Test SportMonks API with a single call. Returns raw response."""
-    if request.query_params.get("token", "") != SCRAPER_TOKEN:
-        raise HTTPException(403, "Forbidden")
-    from sp_diag import sp_raw_league
-    return sp_raw_league(8)   # EPL as a known-good test
-
-
-@app.get("/api/admin/sp-find")
-def sp_find(request: Request, q: str = ""):
-    """Search SportMonks leagues by name."""
-    if request.query_params.get("token", "") != SCRAPER_TOKEN:
-        raise HTTPException(403, "Forbidden")
-    from sp_diag import sp_find_league
-    return sp_find_league(q or "premier")
-
-
-@app.get("/api/admin/sp-sync")
-def sp_sync(request: Request, league: str = "epl"):
-    """Sync one league. Blocks until done. Returns stats."""
-    if request.query_params.get("token", "") != SCRAPER_TOKEN:
-        raise HTTPException(403, "Forbidden")
-    if league not in SP_LEAGUES:
-        raise HTTPException(400, f"Unknown league '{league}'. Known: {list(SP_LEAGUES.keys())}")
-    from sp_diag import sync_one_league
-    import traceback
-    try:
-        return sync_one_league(league, SP_LEAGUES[league])
-    except Exception as e:
-        return {"ok": False, "error": str(e), "traceback": traceback.format_exc()}
-
-# ═══════════════════════════════════════════════════════
-#  MULTI-SOURCE SCRAPER ADMIN
-# ═══════════════════════════════════════════════════════
-# ─── Bzzoiro ───
-BZZ_BASE = "https://sports.bzzoiro.com/api/v2"
-
-def _bzz_headers():
-    import os
-    t = os.environ.get("BZZOIRO_TOKEN", "")
-    return {"Authorization": f"Token {t}"} if t else {}
-
 @app.get("/api/admin/bzz-test")
 def bzz_test(request: Request):
-    if request.query_params.get("token", "") != SCRAPER_TOKEN:
-        raise HTTPException(403)
+    _admin_guard(request)
     h = _bzz_headers()
     if not h:
         return {"error": "BZZOIRO_TOKEN not set on Render. Register at sports.bzzoiro.com/register, then add env var."}
-    with httpx.Client(timeout=15) as c:
-        r = c.get(f"{BZZ_BASE}/leagues/", headers=h)
     try:
+        with httpx.Client(timeout=15) as c:
+            r = c.get(f"{BZZ_BASE}/leagues/", headers=h)
         return {"status": r.status_code, "body": r.json()}
-    except Exception:
-        return {"status": r.status_code, "raw": r.text[:300]}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
 
 @app.get("/api/admin/bzz-leagues")
 def bzz_leagues(request: Request):
-    if request.query_params.get("token", "") != SCRAPER_TOKEN:
-        raise HTTPException(403)
+    _admin_guard(request)
     h = _bzz_headers()
-    if not h: return {"error": "BZZOIRO_TOKEN not set"}
+    if not h:
+        return {"error": "BZZOIRO_TOKEN not set"}
     results = []
     url = f"{BZZ_BASE}/leagues/"
-    with httpx.Client(timeout=20) as c:
-        while url and len(results) < 200:
-            r = c.get(url, headers=h)
-            if r.status_code != 200: break
-            data = r.json()
-            results.extend(data.get("results") or [])
-            url = data.get("next")
-    return {"count": len(results),
-            "leagues": [{"id": l.get("id"), "name": l.get("name"),
-                         "country": l.get("country")} for l in results]}
-
-@app.get("/api/admin/bzz-sync")
-def bzz_sync(request: Request):
-    if request.query_params.get("token", "") != SCRAPER_TOKEN:
-        raise HTTPException(403)
-    lid = request.query_params.get("league_id", "")
-    if not lid: raise HTTPException(400, "league_id required")
-    from bzz_sync import sync_league
     try:
-        return sync_league(int(lid))
-    except Exception as e:
-        import traceback
-        return {"ok": False, "error": str(e), "traceback": traceback.format_exc()}
-
-# ─── Transfermarkt CSV ───
-@app.get("/api/admin/tm-check")
-def tm_check(request: Request):
-    if request.query_params.get("token", "") != SCRAPER_TOKEN:
-        raise HTTPException(403)
-    url = "https://raw.githubusercontent.com/salimt/football-datasets/main/datalake/transfermarkt/raw/player_profiles/player_profiles.csv"
-    with httpx.Client(timeout=20, follow_redirects=True) as c:
-        r = c.head(url)
-    return {"available": r.status_code == 200, "status": r.status_code,
-            "size_bytes": r.headers.get("content-length"),
-            "source": "github.com/salimt/football-datasets"}
-
-@app.post("/api/admin/tm-import")
-def tm_import(request: Request):
-    if request.query_params.get("token", "") != SCRAPER_TOKEN:
-        raise HTTPException(403)
-    from tm_import import import_all
-    try:
-        return import_all()
-    except Exception as e:
-        import traceback
-        return {"ok": False, "error": str(e), "traceback": traceback.format_exc()}
-
-# ─── DB helpers ───
-@app.get("/api/admin/db-counts")
-def db_counts(request: Request):
-    if request.query_params.get("token", "") != SCRAPER_TOKEN:
-        raise HTTPException(403)
-    from collections import Counter
-    db = SessionLocal()
-    try:
-        clubs = db.query(Club).all()
-        players = db.query(Player).all()
+        with httpx.Client(timeout=20) as c:
+            while url and len(results) < 300:
+                r = c.get(url, headers=h)
+                if r.status_code != 200:
+                    break
+                data = r.json()
+                results.extend(data.get("results") or [])
+                url = data.get("next")
         return {
-            "clubs_total": len(clubs),
-            "players_total": len(players),
-            "clubs_by_tournament": dict(Counter(c.tournament_id for c in clubs)),
-            "players_by_tournament": dict(Counter(p.tournament_id for p in players)),
+            "count": len(results),
+            "leagues": [
+                {"id": l.get("id"), "name": l.get("name"), "country": l.get("country")}
+                for l in results
+            ],
         }
-    finally:
-        db.close()
-
-@app.get("/api/admin/db-logs")
-def db_logs(request: Request):
-    if request.query_params.get("token", "") != SCRAPER_TOKEN:
-        raise HTTPException(403)
-    db = SessionLocal()
-    try:
-        rows = db.query(SyncLog).order_by(SyncLog.ran_at.desc()).limit(30).all()
-        return {"logs": [{"task": r.task, "status": r.status, "count": r.count,
-                          "message": r.message, "ran_at": r.ran_at} for r in rows]}
-    finally:
-        db.close()
-
-@app.post("/api/admin/db-wipe-players")
-def db_wipe_players(request: Request):
-    if request.query_params.get("token", "") != SCRAPER_TOKEN:
-        raise HTTPException(403)
-    db = SessionLocal()
-    try:
-        n = db.query(Player).delete()
-        db.commit()
-        return {"ok": True, "deleted": n}
-    finally:
-        db.close()
-
-app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
+    
