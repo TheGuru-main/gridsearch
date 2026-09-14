@@ -515,22 +515,68 @@ def admin_run_scraper(request: Request):
             content={"ok": False, "error": str(e), "traceback": tb, "output": out_lines}
         )
 
-@app.get("/api/admin/db-counts")
-def admin_db_counts(request: Request):
+# ═══════════════════════════════════════════════════════
+#  SPORTMONKS ADMIN — run scraper one league at a time
+# ═══════════════════════════════════════════════════════
+from config import LEAGUES as SP_LEAGUES
+
+@app.get("/api/admin/sp-test")
+def sp_test(request: Request):
+    """Test SportMonks API with a single call. Returns raw response."""
     if request.query_params.get("token", "") != SCRAPER_TOKEN:
         raise HTTPException(403, "Forbidden")
-    from models import Club, Player, Transfer, SyncLog
+    from sp_diag import sp_raw_league
+    return sp_raw_league(8)   # EPL as a known-good test
+
+
+@app.get("/api/admin/sp-find")
+def sp_find(request: Request, q: str = ""):
+    """Search SportMonks leagues by name."""
+    if request.query_params.get("token", "") != SCRAPER_TOKEN:
+        raise HTTPException(403, "Forbidden")
+    from sp_diag import sp_find_league
+    return sp_find_league(q or "premier")
+
+
+@app.get("/api/admin/sp-sync")
+def sp_sync(request: Request, league: str = "epl"):
+    """Sync one league. Blocks until done. Returns stats."""
+    if request.query_params.get("token", "") != SCRAPER_TOKEN:
+        raise HTTPException(403, "Forbidden")
+    if league not in SP_LEAGUES:
+        raise HTTPException(400, f"Unknown league '{league}'. Known: {list(SP_LEAGUES.keys())}")
+    from sp_diag import sync_one_league
+    import traceback
+    try:
+        return sync_one_league(league, SP_LEAGUES[league])
+    except Exception as e:
+        return {"ok": False, "error": str(e), "traceback": traceback.format_exc()}
+
+
+@app.get("/api/admin/db-counts")
+def db_counts(request: Request):
+    """Report what's currently in Neon."""
+    if request.query_params.get("token", "") != SCRAPER_TOKEN:
+        raise HTTPException(403, "Forbidden")
+    from models import Club, Player, SyncLog
     db = SessionLocal()
     try:
+        by_tournament = db.query(
+            Club.tournament_id, Club.id
+        ).all()
+        from collections import Counter
+        clubs_by_t = Counter(c.tournament_id for c in by_tournament)
+        players_by_t = Counter(p.tournament_id for p in db.query(Player).all())
         return {
-            "clubs":     db.query(Club).count(),
-            "players":   db.query(Player).count(),
-            "transfers": db.query(Transfer).count(),
+            "clubs_total": db.query(Club).count(),
+            "players_total": db.query(Player).count(),
+            "clubs_by_tournament": dict(clubs_by_t),
+            "players_by_tournament": dict(players_by_t),
             "recent_logs": [
                 {"task": r.task, "status": r.status, "count": r.count,
                  "ran_at": r.ran_at, "message": r.message}
-                for r in db.query(SyncLog).order_by(SyncLog.ran_at.desc()).limit(10).all()
-            ]
+                for r in db.query(SyncLog).order_by(SyncLog.ran_at.desc()).limit(15).all()
+            ],
         }
     finally:
         db.close()
