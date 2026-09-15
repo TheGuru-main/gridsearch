@@ -1,15 +1,19 @@
 """
-Transfermarkt CSV import — verified URLs, columns, and youth filtering.
+Transfermarkt CSV import — corrected URLs and registry mapping.
 Source: github.com/salimt/football-datasets
+- Fixes: /raw/ removed from URLs
+- Fixes: uses registry_map.canonical_club_id to write clubs under app IDs
+- Fixes: builds a tm_id -> canonical_id map so players inherit the correct club
 """
 import csv
 import io
 import httpx
 from database import SessionLocal, init_db
 from storage import upsert_club, upsert_player, log_sync
+from registry_map import match_tournament, canonical_club_id, REGISTRY
 
+# ── Verified 2026-09 URLs (no /raw/ in path) ──
 GH = "https://raw.githubusercontent.com/salimt/football-datasets/main/datalake/transfermarkt"
-
 TEAMS_URL   = f"{GH}/team_details/team_details.csv"
 PLAYERS_URL = f"{GH}/player_profiles/player_profiles.csv"
 
@@ -31,12 +35,17 @@ def _download(url: str, label: str) -> str:
     return r.text
 
 
+def _get(row: dict, *names):
+    """Try multiple column names (snake_case or Title Case)."""
+    for n in names:
+        v = row.get(n)
+        if v is not None and str(v).strip() != "":
+            return str(v).strip()
+    return ""
+
+
 def _club_id_from_url(url: str) -> str:
-    """Extract numeric club ID from URLs like:
-       /napoli/startseite/verein/6195
-       /vereinslos/startseite/verein/515
-       /retired/startseite/verein/123
-    """
+    """Extract numeric club ID from URLs like /napoli/startseite/verein/6195"""
     if not url:
         return ""
     if "/verein/" in url:
@@ -45,30 +54,51 @@ def _club_id_from_url(url: str) -> str:
 
 
 def import_clubs() -> dict:
-    stats = {"written": 0, "skipped_youth": 0, "errors": []}
+    """Import clubs. Returns stats plus a tm_id -> canonical_id map."""
+    stats = {"written": 0, "skipped_youth": 0, "mapped": 0, "unmapped": 0,
+             "errors": [], "tm_to_canonical": {}}
+
     try:
         text = _download(TEAMS_URL, "teams")
     except Exception as e:
-        return {"written": 0, "skipped_youth": 0, "errors": [f"download: {e}"]}
+        return {**stats, "errors": [f"download: {e}"]}
 
     reader = csv.DictReader(io.StringIO(text))
     db = SessionLocal()
     try:
         for i, row in enumerate(reader):
-            cid = (row.get("club_id") or "").strip()
+            cid = _get(row, "club_id", "Club ID")
             if not cid:
                 continue
-            name = (row.get("club_name") or "").strip()
-            slug = (row.get("club_slug") or "").strip()
+            name = _get(row, "club_name", "Club Name", "name")
+            slug = _get(row, "club_slug", "Club Slug", "slug")
+            country = _get(row, "country_name", "Country Name", "country")
+            comp_slug = _get(row, "competition_slug", "Competition Slug")
+            comp_name = _get(row, "competition_name", "Competition Name")
+
             if _is_youth(name, slug):
                 stats["skipped_youth"] += 1
                 continue
 
+            # Resolve which of our tournaments this club belongs to
+            tid = match_tournament(comp_slug) or match_tournament(comp_name)
+
+            # Compute the canonical ID
+            canonical = canonical_club_id(tid, name, "tm", cid)
+
+            # Save the mapping for the player import step
+            stats["tm_to_canonical"][str(cid)] = canonical
+
+            if tid and canonical.startswith(f"{tid}:"):
+                stats["mapped"] += 1
+            else:
+                stats["unmapped"] += 1
+
             upsert_club(db, {
-                "id": f"tm:{cid}",
-                "tournament_id": (row.get("competition_slug") or "other").strip()[:40] or "other",
+                "id": canonical,
+                "tournament_id": canonical.split(":")[0],
                 "name": name,
-                "country": (row.get("country_name") or "").strip(),
+                "country": country,
                 "col": i % 30,
             })
             stats["written"] += 1
@@ -81,7 +111,10 @@ def import_clubs() -> dict:
         stats["errors"].append(f"clubs write: {e}")
     finally:
         db.close()
-    print(f"[tm] clubs: {stats['written']} written, {stats['skipped_youth']} youth skipped", flush=True)
+
+    print(f"[tm] clubs: {stats['written']} written, "
+          f"{stats['skipped_youth']} youth skipped, "
+          f"{stats['mapped']} mapped, {stats['unmapped']} unmapped", flush=True)
     return stats
 
 
@@ -95,9 +128,10 @@ def _normalize_pos(p: str) -> str:
     return "MID"
 
 
-def import_players() -> dict:
+def import_players(tm_to_canonical: dict) -> dict:
+    """Import players. tm_to_canonical maps Transfermarkt club_id -> registry id."""
     stats = {"written": 0, "skipped_retired": 0, "skipped_no_club": 0,
-             "skipped_youth": 0, "errors": []}
+             "skipped_youth": 0, "mapped": 0, "unmapped": 0, "errors": []}
     try:
         text = _download(PLAYERS_URL, "players")
     except Exception as e:
@@ -107,42 +141,48 @@ def import_players() -> dict:
     db = SessionLocal()
     try:
         for i, row in enumerate(reader):
-            pid = (row.get("player_id") or "").strip()
+            pid = _get(row, "player_id", "Player ID")
             if not pid:
                 continue
 
-            club_url  = (row.get("Current club URL") or "").strip()
-            club_name = (row.get("Current club") or "").strip()
+            # Column names in the CSV are snake_case
+            club_url  = _get(row, "current_club_url", "Current Club URL", "Current club URL")
+            club_id   = _get(row, "current_club_id", "Current Club ID", "Current club ID")
             low = club_url.lower()
 
-            if "retired" in low or "date of death" in str(row).lower():
+            if "retired" in low:
                 stats["skipped_retired"] += 1
                 continue
-            if "vereinslos" in low or not club_url:
+            if "vereinslos" in low or not club_url or not club_id:
                 stats["skipped_no_club"] += 1
                 continue
-            if _is_youth(club_name, ""):
+
+            # Youth clubs — check by URL or by looking up the club name
+            if _is_youth(club_url, ""):
                 stats["skipped_youth"] += 1
                 continue
 
-            club_id = _club_id_from_url(club_url)
-            if not club_id:
-                stats["skipped_no_club"] += 1
-                continue
+            # Determine canonical club_id: prefer our map, else fall back
+            canonical = tm_to_canonical.get(str(club_id))
+            if not canonical:
+                canonical = f"tm:{club_id}"
+                stats["unmapped"] += 1
+            else:
+                stats["mapped"] += 1
 
-            # Position: prefer player_main_position, fall back to Position
-            pos = (row.get("player_main_position") or row.get("Position") or "").strip()
+            pos = _get(row, "player_main_position", "Player Main Position",
+                       "position", "Position")
 
             upsert_player(db, {
                 "id": f"tm:{pid}",
-                "name": (row.get("player_name") or "").strip(),
+                "name": _get(row, "player_name", "Player Name", "name"),
                 "position": _normalize_pos(pos),
-                "club_id": f"tm:{club_id}",
-                "tournament_id": "transfermarkt",
+                "club_id": canonical,
+                "tournament_id": canonical.split(":")[0],
                 "number": None,
-                "nationality": (row.get("Citizenship") or "").strip(),
+                "nationality": _get(row, "citizenship", "Citizenship"),
                 "market_value": None,
-                "photo_url": (row.get("player_image_url") or "").strip(),
+                "photo_url": _get(row, "player_image_url", "Player Image URL"),
             })
             stats["written"] += 1
             if stats["written"] % 2000 == 0:
@@ -154,22 +194,24 @@ def import_players() -> dict:
         stats["errors"].append(f"players write: {e}")
     finally:
         db.close()
-    print(f"[tm] players: {stats['written']} written", flush=True)
+
+    print(f"[tm] players: {stats['written']} written, "
+          f"{stats['mapped']} mapped to registry clubs", flush=True)
     return stats
 
 
 def import_all() -> dict:
     init_db()
     clubs = import_clubs()
-    players = import_players()
+    players = import_players(clubs.pop("tm_to_canonical", {}))
 
     db = SessionLocal()
     try:
         log_sync(db, "tm:import",
                  "ok" if not (clubs["errors"] or players["errors"]) else "partial",
                  players["written"],
-                 f"clubs={clubs['written']} youth={clubs['skipped_youth']} "
-                 f"players={players['written']} retired={players['skipped_retired']}")
+                 f"clubs={clubs['written']} mapped={clubs['mapped']} "
+                 f"players={players['written']} p_mapped={players['mapped']}")
     finally:
         db.close()
 
@@ -177,9 +219,12 @@ def import_all() -> dict:
         "ok": not (clubs["errors"] or players["errors"]),
         "clubs": clubs["written"],
         "clubs_skipped_youth": clubs["skipped_youth"],
+        "clubs_mapped": clubs["mapped"],
+        "clubs_unmapped": clubs["unmapped"],
         "players": players["written"],
+        "players_mapped": players["mapped"],
+        "players_unmapped": players["unmapped"],
         "players_skipped_retired": players["skipped_retired"],
         "players_skipped_no_club": players["skipped_no_club"],
-        "players_skipped_youth": players["skipped_youth"],
         "errors": clubs["errors"] + players["errors"],
     }
