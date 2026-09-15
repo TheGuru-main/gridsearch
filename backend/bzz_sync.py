@@ -1,49 +1,35 @@
-"""
-Bzzoiro sync — single league OR all leagues, with progress tracking.
-Free token: sports.bzzoiro.com/register
-"""
 import os
 import time
 import threading
 import httpx
 from database import SessionLocal, init_db
 from storage import upsert_club, upsert_player, log_sync
+from registry_map import match_tournament, match_club, canonical_club_id
 
 BASE = "https://sports.bzzoiro.com/api/v2"
 
-# Skip leagues whose names match these
-SKIP_TOKENS = [
-    "qualification", "cup", "women", "under", "u18", "u19", "u20",
-    "u21", "u23", "youth", "academy", "playoff", "play-off",
-    "friendly", "friendlies",
-]
+SKIP_TOKENS = ["qualification", "women", "under", "u18", "u19", "u20",
+               "u21", "u23", "youth", "academy", "friendly", "friendlies"]
 
-# Module-level state for background sync
 _SYNC_STATE = {
-    "running": False,
-    "stop_requested": False,
-    "started_at": 0,
-    "finished_at": 0,
-    "total_leagues": 0,
-    "current_index": 0,
-    "current_league_id": None,
-    "current_league_name": None,
-    "leagues_completed": [],
-    "leagues_skipped": [],
-    "clubs_written": 0,
-    "players_written": 0,
-    "errors": [],
-    "mode": "idle",  # "idle" | "all" | "one"
+    "running": False, "stop_requested": False,
+    "started_at": 0, "finished_at": 0,
+    "total_leagues": 0, "current_index": 0,
+    "current_league_id": None, "current_league_name": None,
+    "leagues_completed": [], "leagues_skipped": [],
+    "clubs_written": 0, "players_written": 0,
+    "mapped_clubs": 0, "unmapped_clubs": 0,
+    "errors": [], "mode": "idle",
 }
 
 
-def get_state() -> dict:
+def get_state():
     return dict(_SYNC_STATE)
 
 
 def stop_sync():
     _SYNC_STATE["stop_requested"] = True
-    return {"ok": True, "message": "Stop requested. Finishing current team..."}
+    return {"ok": True, "message": "Stop requested."}
 
 
 def _h():
@@ -57,7 +43,6 @@ def _pos(code):
 
 
 def _extract_list(payload):
-    """Handle both raw lists and paginated {count, results} objects."""
     if isinstance(payload, list):
         return payload
     if isinstance(payload, dict):
@@ -74,8 +59,7 @@ def _should_skip_league(name: str) -> bool:
     return any(tok in low for tok in SKIP_TOKENS)
 
 
-def _fetch_all_leagues(client: httpx.Client) -> list:
-    """Paginate through /api/v2/leagues/ and return all."""
+def _fetch_all_leagues(client):
     leagues = []
     url = f"{BASE}/leagues/"
     params = {"limit": 100}
@@ -91,18 +75,20 @@ def _fetch_all_leagues(client: httpx.Client) -> list:
     return leagues
 
 
-def sync_league(league_id: int, silent: bool = False) -> dict:
-    """Sync one league. Returns stats. Used by both single and all-sync."""
+def sync_league(league_id: int, league_name: str = None, silent: bool = False) -> dict:
     h = _h()
     if not h:
-        return {"ok": False, "error": "BZZOIRO_TOKEN not set on Render"}
+        return {"ok": False, "error": "BZZOIRO_TOKEN not set"}
 
-    stats = {"league_id": league_id, "clubs": 0, "players": 0,
+    stats = {"league_id": league_id, "league_name": league_name,
+             "clubs": 0, "players": 0, "mapped": 0, "unmapped": 0,
              "errors": [], "teams": []}
-    key = f"bzz_{league_id}"
+
+    # Resolve tournament key from name
+    registry_tid = match_tournament(league_name) if league_name else None
+    source_key = f"bzz_{league_id}"
 
     with httpx.Client(timeout=30, headers=h) as c:
-        # Teams
         url = f"{BASE}/teams/"
         params = {"league_id": league_id, "limit": 100}
         teams = []
@@ -118,26 +104,37 @@ def sync_league(league_id: int, silent: bool = False) -> dict:
             time.sleep(0.15)
 
         if not teams:
-            stats["errors"].append("no teams returned")
+            stats["errors"].append("no teams")
             return stats
 
-        # Clubs
+        # Clubs — with mapping
         db = SessionLocal()
         try:
             for i, t in enumerate(teams):
+                team_name = t.get("name") or ""
+                # Resolve canonical club ID
+                canonical = canonical_club_id(
+                    registry_tid, team_name, source_key, t.get("id")
+                )
+                tid_for_db = canonical.split(":")[0]
+
                 upsert_club(db, {
-                    "id": f"{key}:{t.get('id')}",
-                    "tournament_id": key,
-                    "name": t.get("name") or "",
+                    "id": canonical,
+                    "tournament_id": tid_for_db,
+                    "name": team_name,
                     "country": t.get("country") or "",
                     "col": i,
                 })
                 stats["clubs"] += 1
+                if registry_tid and canonical.startswith(f"{registry_tid}:"):
+                    stats["mapped"] += 1
+                else:
+                    stats["unmapped"] += 1
             db.commit()
         finally:
             db.close()
 
-        # Squads
+        # Squads — write players under the canonical club ID
         for t in teams:
             if _SYNC_STATE["stop_requested"]:
                 break
@@ -145,11 +142,11 @@ def sync_league(league_id: int, silent: bool = False) -> dict:
             tname = t.get("name") or f"team-{tid}"
             if not tid:
                 continue
+            canonical = canonical_club_id(registry_tid, tname, source_key, tid)
             try:
                 time.sleep(0.15)
                 r = c.get(f"{BASE}/teams/{tid}/squad/")
                 if r.status_code != 200:
-                    stats["teams"].append({"team": tname, "status": r.status_code})
                     continue
                 squad = _extract_list(r.json())
                 db = SessionLocal()
@@ -161,11 +158,11 @@ def sync_league(league_id: int, silent: bool = False) -> dict:
                         if not pid:
                             continue
                         upsert_player(db, {
-                            "id": f"{key}:{tid}:{pid}",
+                            "id": f"{canonical}:{pid}",
                             "name": p.get("name") or "",
                             "position": _pos(p.get("position")),
-                            "club_id": f"{key}:{tid}",
-                            "tournament_id": key,
+                            "club_id": canonical,
+                            "tournament_id": canonical.split(":")[0],
                             "number": p.get("shirt_number"),
                             "nationality": p.get("nationality") or p.get("nationality_code"),
                             "market_value": p.get("market_value"),
@@ -173,7 +170,6 @@ def sync_league(league_id: int, silent: bool = False) -> dict:
                         })
                     db.commit()
                     stats["players"] += len(squad)
-                    stats["teams"].append({"team": tname, "players": len(squad)})
                 finally:
                     db.close()
             except Exception as e:
@@ -184,7 +180,9 @@ def sync_league(league_id: int, silent: bool = False) -> dict:
         try:
             log_sync(db, f"bzz:{league_id}",
                      "ok" if not stats["errors"] else "partial",
-                     stats["players"], "; ".join(stats["errors"][:2]))
+                     stats["players"],
+                     f"mapped={stats['mapped']} unmapped={stats['unmapped']} "
+                     f"players={stats['players']}")
         finally:
             db.close()
 
@@ -193,18 +191,14 @@ def sync_league(league_id: int, silent: bool = False) -> dict:
 
 
 def _run_sync_all():
-    """Background thread: sync every league one by one."""
-    _SYNC_STATE["running"] = True
-    _SYNC_STATE["stop_requested"] = False
-    _SYNC_STATE["started_at"] = time.time()
-    _SYNC_STATE["finished_at"] = 0
-    _SYNC_STATE["leagues_completed"] = []
-    _SYNC_STATE["leagues_skipped"] = []
-    _SYNC_STATE["clubs_written"] = 0
-    _SYNC_STATE["players_written"] = 0
-    _SYNC_STATE["errors"] = []
-    _SYNC_STATE["mode"] = "all"
-
+    _SYNC_STATE.update({
+        "running": True, "stop_requested": False,
+        "started_at": time.time(), "finished_at": 0,
+        "leagues_completed": [], "leagues_skipped": [],
+        "clubs_written": 0, "players_written": 0,
+        "mapped_clubs": 0, "unmapped_clubs": 0,
+        "errors": [], "mode": "all",
+    })
     init_db()
 
     h = _h()
@@ -218,18 +212,14 @@ def _run_sync_all():
         with httpx.Client(timeout=30, headers=h) as c:
             all_leagues = _fetch_all_leagues(c)
 
-        # Filter: keep domestic leagues with a current season
         candidates = []
         for lg in all_leagues:
-            if not lg.get("is_active"):
-                continue
-            if not lg.get("current_season"):
+            if not lg.get("is_active") or not lg.get("current_season"):
                 continue
             name = lg.get("name") or ""
             if _should_skip_league(name):
                 _SYNC_STATE["leagues_skipped"].append(
-                    {"id": lg.get("id"), "name": name, "reason": "filtered"}
-                )
+                    {"id": lg.get("id"), "name": name, "reason": "filtered"})
                 continue
             candidates.append(lg)
 
@@ -243,21 +233,21 @@ def _run_sync_all():
             _SYNC_STATE["current_league_name"] = lg.get("name")
 
             try:
-                stats = sync_league(lg["id"], silent=True)
+                stats = sync_league(lg["id"], lg.get("name"), silent=True)
                 _SYNC_STATE["clubs_written"] += stats.get("clubs", 0)
                 _SYNC_STATE["players_written"] += stats.get("players", 0)
+                _SYNC_STATE["mapped_clubs"] += stats.get("mapped", 0)
+                _SYNC_STATE["unmapped_clubs"] += stats.get("unmapped", 0)
                 _SYNC_STATE["leagues_completed"].append({
-                    "id": lg["id"],
-                    "name": lg.get("name"),
+                    "id": lg["id"], "name": lg.get("name"),
                     "clubs": stats.get("clubs", 0),
                     "players": stats.get("players", 0),
-                    "errors": stats.get("errors", [])[:3],
+                    "mapped": stats.get("mapped", 0),
                 })
                 if stats.get("errors"):
                     _SYNC_STATE["errors"].extend(stats["errors"][:2])
             except Exception as e:
                 _SYNC_STATE["errors"].append(f"league {lg.get('id')}: {e}")
-
     except Exception as e:
         _SYNC_STATE["errors"].append(f"outer: {e}")
     finally:
@@ -270,17 +260,16 @@ def _run_sync_all():
             log_sync(db, "bzz:sync_all",
                      "ok" if not _SYNC_STATE["errors"] else "partial",
                      _SYNC_STATE["players_written"],
-                     f"leagues={len(_SYNC_STATE['leagues_completed'])} "
                      f"clubs={_SYNC_STATE['clubs_written']} "
+                     f"mapped={_SYNC_STATE['mapped_clubs']} "
                      f"players={_SYNC_STATE['players_written']}")
         finally:
             db.close()
 
 
-def start_sync_all() -> dict:
-    """Launch background sync. Returns immediately."""
+def start_sync_all():
     if _SYNC_STATE["running"]:
-        return {"ok": False, "error": "Already running. Stop it first."}
+        return {"ok": False, "error": "Already running"}
     t = threading.Thread(target=_run_sync_all, daemon=True)
     t.start()
-    return {"ok": True, "message": "Sync started in background. Poll /api/admin/bzz-progress for status."}
+    return {"ok": True, "message": "Sync started"}
