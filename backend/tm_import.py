@@ -130,49 +130,66 @@ def _normalize_pos(p: str) -> str:
 
 
 def import_players(tm_to_canonical: dict) -> dict:
-    """Import players. tm_to_canonical maps Transfermarkt club_id -> registry id."""
     stats = {"written": 0, "skipped_retired": 0, "skipped_no_club": 0,
-             "skipped_youth": 0, "mapped": 0, "unmapped": 0, "errors": []}
+             "skipped_youth": 0, "mapped": 0, "unmapped": 0,
+             "errors": [], "sample_headers": None}
     try:
         text = _download(PLAYERS_URL, "players")
     except Exception as e:
         return {**stats, "errors": [f"download: {e}"]}
 
     reader = csv.DictReader(io.StringIO(text))
+    stats["sample_headers"] = reader.fieldnames  # for diagnostics
+
     db = SessionLocal()
     try:
         for i, row in enumerate(reader):
-            pid = _get(row, "player_id", "Player ID")
+            pid = _get(row, "player_id", "Player ID", "id")
             if not pid:
                 continue
 
-            # Column names in the CSV are snake_case
-            club_url  = _get(row, "current_club_url", "Current Club URL", "Current club URL")
-            club_id   = _get(row, "current_club_id", "Current Club ID", "Current club ID")
-            low = club_url.lower()
+            # Club identification — accept EITHER id or url
+            club_url = _get(row, "current_club_url", "Current Club URL",
+                            "Current club URL", "club_url")
+            club_id  = _get(row, "current_club_id", "Current Club ID",
+                            "Current club ID", "club_id")
 
-            if "retired" in low:
-                stats["skipped_retired"] += 1
-                continue
-            if "vereinslos" in low or not club_url or not club_id:
+            # Skip only if BOTH are missing
+            if not club_url and not club_id:
                 stats["skipped_no_club"] += 1
                 continue
 
-            # Youth clubs — check by URL or by looking up the club name
-            if _is_youth(club_url, ""):
-                stats["skipped_youth"] += 1
-                continue
+            # Skip retired / without club when URL is present
+            if club_url:
+                low = club_url.lower()
+                if "retired" in low:
+                    stats["skipped_retired"] += 1
+                    continue
+                if "vereinslos" in low:
+                    stats["skipped_no_club"] += 1
+                    continue
+                if _is_youth(club_url, ""):
+                    stats["skipped_youth"] += 1
+                    continue
 
-            # Determine canonical club_id: prefer our map, else fall back
-            canonical = tm_to_canonical.get(str(club_id))
+            # Resolve canonical club ID
+            canonical = None
+            if club_id:
+                canonical = tm_to_canonical.get(str(club_id))
+            if not canonical and club_url:
+                cid_from_url = _club_id_from_url(club_url)
+                if cid_from_url:
+                    canonical = tm_to_canonical.get(str(cid_from_url))
             if not canonical:
-                canonical = f"tm:{club_id}"
+                # fall back to a tm: prefix so the player still lands somewhere
+                ref = club_id or _club_id_from_url(club_url) or "unknown"
+                canonical = f"tm:{ref}"
                 stats["unmapped"] += 1
             else:
                 stats["mapped"] += 1
 
             pos = _get(row, "player_main_position", "Player Main Position",
-                       "position", "Position")
+                       "position", "Position", "player_position")
 
             upsert_player(db, {
                 "id": f"tm:{pid}",
@@ -181,9 +198,11 @@ def import_players(tm_to_canonical: dict) -> dict:
                 "club_id": canonical,
                 "tournament_id": canonical.split(":")[0],
                 "number": None,
-                "nationality": _get(row, "citizenship", "Citizenship"),
+                "nationality": _get(row, "citizenship", "Citizenship",
+                                    "nationality"),
                 "market_value": None,
-                "photo_url": _get(row, "player_image_url", "Player Image URL"),
+                "photo_url": _get(row, "player_image_url", "Player Image URL",
+                                  "image_url"),
             })
             stats["written"] += 1
             if stats["written"] % 2000 == 0:
@@ -197,9 +216,8 @@ def import_players(tm_to_canonical: dict) -> dict:
         db.close()
 
     print(f"[tm] players: {stats['written']} written, "
-          f"{stats['mapped']} mapped to registry clubs", flush=True)
+          f"{stats['mapped']} mapped, {stats['unmapped']} unmapped", flush=True)
     return stats
-
 
 def import_all() -> dict:
     init_db()
