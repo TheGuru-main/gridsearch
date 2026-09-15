@@ -1,13 +1,15 @@
 /**
  * Fantasy workspace.
- * Data source order:
- *   1. Local OpenBox.FantasyRegistry (fast, always available)
- *   2. Backend /api/fantasy/clubs/{id}/players (if scraper has run)
- *   3. Graceful placeholder (never crashes)
+ * Player source order:
+ *   1. Backend /api/fantasy/clubs/{tid}:{cid}/players  (DB, live)
+ *   2. Local OpenBox.FantasyRegistry                    (registry fallback)
+ *   3. Graceful empty state                             (never crashes)
  */
 (function () {
 
     const SQUAD_KEY = "openbox_squad";
+    const _playerCache = {};       // tid:cid -> array
+    const _cachePromise = {};      // tid:cid -> Promise
 
     /* ─── Squad storage ─── */
     function loadSquad() {
@@ -36,7 +38,7 @@
         };
     }
 
-    /* ─── Tournament access (defensive) ─── */
+    /* ─── Tournament access ─── */
     function getTournaments() {
         const reg = window.OpenBox?.FantasyRegistry?.tournaments;
         if (!reg || typeof reg !== "object") return [];
@@ -65,47 +67,119 @@
         };
     }
 
-    /* ─── Player access (the bug fix) ─── */
-    function getClubPlayers(tid, cid) {
+    function getClubName(tid, cid) {
+        const t = OpenBox.FantasyRegistry?.tournaments?.[tid];
+        if (!t) return cid;
+        const c = (t.clubs || []).find(function (x) { return x.id === cid; });
+        return (c && c.name) || cid;
+    }
+
+    /* ─── PRICE + POINT helpers ─── */
+    const TIER_BASE = {
+        npfl:120, egypt_pl:140, sa_psl:140, botola:140,
+        cafcl:250, cafcc:250,
+        brasileirao_b:280, brasileirao_a:350, argentina_primera:350,
+        mls:400, ligamx:400, j1:400, saudi_pl:450,
+        eredivisie:400, portugal:450, turkey:400,
+        epl:600, laliga:600, seriea:600, bundes:550, ligue1:500,
+        ucl:800, uel:700, uecl:600,
+        libertadores:500, sudamericana:450, concacaf_cl:450, afc_cl:500,
+        worldcup:1000, afcon:800, euro:900, copa_america:800
+    };
+    const POS_BONUS = { GK:0, DEF:20, MID:40, FWD:80 };
+
+    function priceFor(tid, name, pos) {
+        const base = TIER_BASE[tid] || 300;
+        const hash = (name || "").split("").reduce(function (s, c) { return s + c.charCodeAt(0); }, 0);
+        return base + (POS_BONUS[pos] || 40) + (hash % 60);
+    }
+
+    /* ─── Normalize position strings ─── */
+    function normPos(p) {
+        const s = (p || "").toString().toLowerCase();
+        if (s.startsWith("g") || s === "gk" || s === "goalkeeper") return "GK";
+        if (s.startsWith("d") || s === "def" || s === "defender") return "DEF";
+        if (s.startsWith("m") || s === "mid" || s === "midfielder") return "MID";
+        if (s.startsWith("f") || s.startsWith("a") || s === "forward" || s === "attacker") return "FWD";
+        return "MID";
+    }
+
+    /* ─── Backend fetch (with cache) ─── */
+    function fetchFromBackend(tid, cid) {
+        const key = tid + ":" + cid;
+        if (_cachePromise[key]) return _cachePromise[key];
+
+        _cachePromise[key] = (async function () {
+            try {
+                const url = "/api/fantasy/clubs/" + encodeURIComponent(key) + "/players";
+                const r = await fetch(url, { credentials: "include" });
+                if (!r.ok) throw new Error("HTTP " + r.status);
+                const data = await r.json();
+                const clubName = getClubName(tid, cid);
+                const tName = OpenBox.FantasyRegistry?.tournaments?.[tid]?.name || tid;
+                const list = (data.players || []).map(function (p) {
+                    return {
+                        id: p.id,
+                        name: p.name || "Unknown",
+                        pos: normPos(p.position),
+                        price: p.price || priceFor(tid, p.name, normPos(p.position)),
+                        points: p.points_this_week || 0,
+                        number: p.number,
+                        nationality: p.nationality,
+                        club_id: cid,
+                        club_name: clubName,
+                        tournament_id: tid,
+                        tournament_name: tName,
+                        source: "db"
+                    };
+                });
+                _playerCache[key] = list;
+                return list;
+            } catch (e) {
+                // Swallow — fall back to local
+                return null;
+            }
+        })();
+
+        return _cachePromise[key];
+    }
+
+    /* ─── Local registry fallback ─── */
+    function getLocalPlayers(tid, cid) {
         const t = OpenBox.FantasyRegistry?.tournaments?.[tid];
         if (!t) return [];
         const clubs = Array.isArray(t.clubs) ? t.clubs : [];
         const club = clubs.find(function (c) { return c.id === cid; });
         if (!club) return [];
-
-        // CRITICAL FIX: guard against missing players array
         const raw = Array.isArray(club.players) ? club.players : [];
-        if (!raw.length) return [];
-
-        const TIER_BASE = {
-            npfl:120, egypt_pl:140, sa_psl:140, botola:140,
-            cafcl:250, cafcc:250,
-            brasileirao_b:280, brasileirao_a:350, argentina_primera:350,
-            mls:400, ligamx:400, j1:400, saudi_pl:450,
-            eredivisie:400, portugal:450, turkey:400,
-            epl:600, laliga:600, seriea:600, bundes:550, ligue1:500,
-            ucl:800, uel:700, uecl:600,
-            libertadores:500, sudamericana:450, concacaf_cl:450, afc_cl:500,
-            worldcup:1000, afcon:800, euro:900, copa_america:800
-        };
-        const base = TIER_BASE[tid] || 300;
-        const POS_BONUS = { GK:0, DEF:20, MID:40, FWD:80 };
-
         return raw.map(function (p, i) {
-            const id = tid + ":" + cid + ":" + i;
-            const hash = (p.name || "").split("").reduce(function (s, c) { return s + c.charCodeAt(0); }, 0);
-            const price = base + (POS_BONUS[p.pos] || 40) + (hash % 60);
+            const pos = normPos(p.pos);
             return {
-                id: id,
+                id: tid + ":" + cid + ":" + i,
                 name: p.name || ("Player " + (i + 1)),
-                pos: p.pos || "MID",
+                pos: pos,
+                price: priceFor(tid, p.name, pos),
+                points: 0,
                 club_id: cid,
                 club_name: club.name || cid,
                 tournament_id: tid,
                 tournament_name: t.name || tid,
-                price: price
+                source: "registry"
             };
         });
+    }
+
+    /* ─── Public player fetch: async ─── */
+    async function getClubPlayers(tid, cid) {
+        const key = tid + ":" + cid;
+        if (_playerCache[key]) return _playerCache[key];
+
+        const fromDb = await fetchFromBackend(tid, cid);
+        if (fromDb && fromDb.length) return fromDb;
+
+        const local = getLocalPlayers(tid, cid);
+        _playerCache[key] = local;
+        return local;
     }
 
     /* ─── GSP row anchor ─── */
@@ -208,12 +282,21 @@
         });
     }
 
-    function renderPlayers(body, tid, cid) {
+    async function renderPlayers(body, tid, cid) {
         const t = getTournament(tid);
         const club = t ? t.clubs.find(function (c) { return c.id === cid; }) : null;
         if (!club) { body.innerHTML = '<p class="hint">Club not found.</p>'; return; }
 
-        const players = getClubPlayers(tid, cid);
+        // Loading state
+        body.innerHTML =
+            '<a href="#" class="back-btn" id="back">← ' + escapeHtml(t.name) + '</a>' +
+            '<h3>' + escapeHtml(club.name) + '</h3>' +
+            '<p class="hint">Loading squad...</p>';
+        document.getElementById("back").addEventListener("click", function (e) {
+            e.preventDefault(); renderClubs(body, tid);
+        });
+
+        const players = await getClubPlayers(tid, cid);
         const squad = loadSquad() || emptySquad();
         const owned = new Set(squad.players.map(function (p) { return p.id; }));
         const balance = OpenBox.App?.currentUser?.byflints || 0;
@@ -222,32 +305,36 @@
             body.innerHTML =
                 '<a href="#" class="back-btn" id="back">← ' + escapeHtml(t.name) + '</a>' +
                 '<h3>' + escapeHtml(club.name) + '</h3>' +
-                '<p class="hint">Player roster for this club hasn\'t been populated yet. ' +
-                'The scraper runs every 6 hours and will fill this in. ' +
-                'Tournaments from the first registry file already have players — try those meanwhile.</p>';
+                '<p class="hint">No players found for this club yet. ' +
+                'Run the scraper from <code>/admin.html</code> to populate this club.</p>';
             document.getElementById("back").addEventListener("click", function (e) {
                 e.preventDefault(); renderClubs(body, tid);
             });
             return;
         }
 
+        const sourceBadge = players[0].source === "db"
+            ? '<span class="src-badge db">LIVE</span>'
+            : '<span class="src-badge local">REGISTRY</span>';
+
         body.innerHTML =
             '<a href="#" class="back-btn" id="back">← ' + escapeHtml(t.name) + '</a>' +
-            '<h3>' + escapeHtml(club.name) + '</h3>' +
+            '<h3>' + escapeHtml(club.name) + sourceBadge + '</h3>' +
             '<div class="balance-line"><span>Balance: <strong>' + Number(balance).toFixed(0) + ' bf</strong></span>' +
-            '<span>' + squad.players.length + ' in squad</span></div>' +
+            '<span>' + squad.players.length + ' in squad · ' + players.length + ' available</span></div>' +
             '<div class="player-list">' +
                 players.map(function (p) {
                     const isOwned = owned.has(p.id);
                     const canAfford = balance >= p.price;
                     return '<div class="player-card">' +
                         '<div class="pc-left"><strong>' + escapeHtml(p.name) + '</strong>' +
-                        '<small>' + p.pos + ' · ' + p.price + ' bf</small></div>' +
+                        '<small>' + p.pos + ' · ' + p.price + ' bf' +
+                        (p.points ? ' · ' + p.points + ' pts' : '') + '</small></div>' +
                         '<div class="pc-right">' +
                         (isOwned
                             ? '<span class="owned-tag">✓ Owned</span>'
                             : '<a href="#" class="add-btn ' + (canAfford ? '' : 'disabled') + '" ' +
-                              'data-pid="' + p.id + '" data-name="' + escapeHtml(p.name) + '" ' +
+                              'data-pid="' + escapeHtml(p.id) + '" data-name="' + escapeHtml(p.name) + '" ' +
                               'data-pos="' + p.pos + '" data-price="' + p.price + '" ' +
                               'data-tid="' + tid + '" data-cid="' + cid + '" ' +
                               'data-tname="' + escapeHtml(t.name) + '" data-cname="' + escapeHtml(club.name) + '">' +
@@ -343,7 +430,7 @@
                 '<span>FWD ' + counts.FWD + '</span>' +
                 '<span>Total ' + squad.players.length + '/18</span>' +
             '</div>' +
-            ["GK","DEF","MID","FWD"].map(function (pos) {
+            (["GK","DEF","MID","FWD"].map(function (pos) {
                 const group = squad.players.filter(function (p) { return p.pos === pos; });
                 if (!group.length) return "";
                 return '<h4 class="pos-header">' + pos + ' · ' + group.length + '</h4>' +
@@ -360,178 +447,5 @@
                                 '</div></div>';
                         }).join("") +
                     '</div>';
-            }).join("") ||
-            '<p class="hint">No players yet. Tap + on any player to add.</p>' +
-            (squad.players.length ? '<a href="#" class="primary-btn" id="viewTeamBtn">View Team Sheet →</a>' : '');
-
-        document.getElementById("squadName").addEventListener("input", function (e) {
-            squad.name = e.target.value;
-            squad.gsp_row = computeTeamRow(squad.name, OpenBox.App.currentUser?.phone);
-            saveSquad(squad);
-        });
-        document.getElementById("squadFormation").addEventListener("change", function (e) {
-            squad.formation = e.target.value;
-            saveSquad(squad);
-            alert("Formation set to " + squad.formation);
-        });
-        body.querySelectorAll(".capt-btn").forEach(function (b) {
-            b.addEventListener("click", function (e) {
-                e.preventDefault(); squad.captain = b.dataset.cid; saveSquad(squad); render();
-            });
-        });
-        body.querySelectorAll(".vice-btn").forEach(function (b) {
-            b.addEventListener("click", function (e) {
-                e.preventDefault(); squad.vice = b.dataset.vid; saveSquad(squad); render();
-            });
-        });
-        body.querySelectorAll(".rm-btn").forEach(function (b) {
-            b.addEventListener("click", function (e) {
-                e.preventDefault();
-                if (!confirm("Remove player and refund byflints?")) return;
-                removePlayerFromSquad(b.dataset.rid);
-                render();
-            });
-        });
-        const vt = document.getElementById("viewTeamBtn");
-        if (vt) vt.addEventListener("click", function (e) {
-            e.preventDefault(); setView("team");
-        });
-    }
-
-
-    /* ─── Team sheet ─── */
-    function renderTeam(body) {
-        const squad = loadSquad() || emptySquad();
-        const form = squad.formation || "4-4-2";
-        const parts = form.split("-").map(Number);
-        const def = parts[0] || 4, mid = parts[1] || 4, fwd = parts[2] || 2;
-
-        const byPos = { GK: [], DEF: [], MID: [], FWD: [] };
-        squad.players.forEach(function (p) {
-            if (!byPos[p.pos]) byPos[p.pos] = [];
-            byPos[p.pos].push(p);
-        });
-
-        const startingXI = {
-            GK: byPos.GK.slice(0, 1),
-            DEF: byPos.DEF.slice(0, def),
-            MID: byPos.MID.slice(0, mid),
-            FWD: byPos.FWD.slice(0, fwd)
-        };
-        const starters = [].concat(startingXI.GK, startingXI.DEF, startingXI.MID, startingXI.FWD);
-        const starterIds = new Set(starters.map(function (p) { return p.id; }));
-        const bench = squad.players.filter(function (p) { return !starterIds.has(p.id); });
-
-        function chip(p) {
-            return '<div class="pitch-player ' +
-                (squad.captain === p.id ? "captain" : "") + ' ' +
-                (squad.vice === p.id ? "vice" : "") + '">' +
-                '<strong>' + escapeHtml(p.name.split(" ").slice(-1)[0]) + '</strong>' +
-                '<small>' + p.pos + ' · ' + p.price + '</small>' +
-                (squad.captain === p.id ? '<span class="badge c">C</span>' : '') +
-                (squad.vice === p.id ? '<span class="badge v">V</span>' : '') +
-                '</div>';
-        }
-
-        body.innerHTML =
-            '<a href="#" class="back-btn" id="back">← My Squad</a>' +
-            '<div class="team-sheet-header"><h3>' + escapeHtml(squad.name) + '</h3>' +
-            '<small>' + form + ' · GSP row ' + (squad.gsp_row || "—") + '</small></div>' +
-            '<div class="pitch">' +
-                '<div class="pitch-row fwd">' + startingXI.FWD.map(chip).join("") + '</div>' +
-                '<div class="pitch-row mid">' + startingXI.MID.map(chip).join("") + '</div>' +
-                '<div class="pitch-row def">' + startingXI.DEF.map(chip).join("") + '</div>' +
-                '<div class="pitch-row gk">' + startingXI.GK.map(chip).join("") + '</div>' +
-            '</div>' +
-            '<h4 class="pos-header">Bench · ' + bench.length + '</h4>' +
-            '<div class="bench-list">' +
-                (bench.length
-                    ? bench.map(function (p) {
-                        return '<div class="bench-item">' + escapeHtml(p.name) + ' <small>' + p.pos + '</small></div>';
-                    }).join("")
-                    : '<p class="hint">No bench players.</p>') +
-            '</div>';
-
-        document.getElementById("back").addEventListener("click", function (e) {
-            e.preventDefault(); setView("squad");
-        });
-    }
-
-    /* ─── Hot ─── */
-    function renderHot(body) {
-        const list = getTournaments();
-        if (!list.length) { body.innerHTML = '<p class="hint">No data.</p>'; return; }
-
-        const week = Math.floor(Date.now() / (7 * 86400000));
-        const rows = list.map(function (t) {
-            const tour = OpenBox.FantasyRegistry.tournaments[t.id];
-            if (!tour || !Array.isArray(tour.clubs) || !tour.clubs.length) return null;
-            const firstClub = tour.clubs[0];
-            const players = getClubPlayers(t.id, firstClub.id);
-            if (!players.length) return null;
-            const scored = players.map(function (p) {
-                const h = (p.id + ":" + week).split("").reduce(function (s, c) { return (s * 31 + c.charCodeAt(0)) >>> 0; }, 0);
-                return { p: p, pts: ((h % 120) / 10 + 1).toFixed(1) };
-            });
-            const top = scored.reduce(function (a, b) { return parseFloat(b.pts) > parseFloat(a.pts) ? b : a; });
-            return { tid: t.id, tournament: t.name, player: top.p, pts: top.pts };
-        }).filter(Boolean);
-
-        if (!rows.length) {
-            body.innerHTML = '<p class="hint">Hot list will populate once the scraper runs.</p>';
-            return;
-        }
-
-        body.innerHTML =
-            '<h3>🔥 Hot This Week</h3><div class="hot-list">' +
-            rows.map(function (r) {
-                return '<div class="hot-player">' +
-                    '<div><strong>' + escapeHtml(r.player.name) + '</strong>' +
-                    '<small>' + escapeHtml(r.tournament) + ' · ' + r.player.pos + '</small></div>' +
-                    '<div class="hot-pts">' + r.pts + ' pts<br><small>' + r.player.price + ' bf</small></div>' +
-                    '</div>';
-            }).join("") + '</div>';
-    }
-
-    /* ─── Transfers ─── */
-    async function renderTransfers(body) {
-        body.innerHTML = '<p class="hint">Loading transfers...</p>';
-        try {
-            const r = await OpenBox.API.transfers(30);
-            const list = (r && r.data && r.data.transfers) || [];
-            if (!list.length) {
-                body.innerHTML = '<h3>📋 Transfers</h3>' +
-                    '<p class="hint">No transfers in the last 30 days. The scraper runs every 6 hours.</p>';
-                return;
-            }
-            body.innerHTML = '<h3>📋 Recent Transfers (30 days)</h3><div class="transfer-list">' +
-                list.map(function (t) {
-                    return '<div class="transfer-row">' +
-                        '<strong>' + escapeHtml(t.player_name) + '</strong>' +
-                        '<small>' + escapeHtml(t.from_club || "?") + " → " + escapeHtml(t.to_club || "?") + '</small>' +
-                        '<span>' + escapeHtml(t.fee || "—") + ' · ' + escapeHtml(t.date || "") + ' · ' + escapeHtml(t.source || "") + '</span>' +
-                        '</div>';
-                }).join("") + '</div>';
-        } catch (err) {
-            body.innerHTML = '<p class="hint">Could not load transfers: ' + escapeHtml(err.message) + '</p>';
-        }
-    }
-
-    function escapeHtml(s) {
-        return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
-            return ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[c];
-        });
-    }
-
-    /* ─── Tab wiring ─── */
-    document.addEventListener("DOMContentLoaded", function () {
-        document.querySelectorAll(".ftab").forEach(function (t) {
-            t.addEventListener("click", function (e) {
-                e.preventDefault();
-                setView(t.dataset.ftab);
-            });
-        });
-    });
-
-    OpenBox.Fantasy = { show: show, loadSquad: loadSquad, saveSquad: saveSquad, emptySquad: emptySquad };
-})();
+            }).join("") || '<p class="hint">No players yet. Tap + on any player to add.</p>') +
+            (squad.players.length ? '<a href="#" class="primary-btn" id="viewTeamBtn">View T
