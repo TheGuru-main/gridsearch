@@ -128,20 +128,18 @@ def _normalize_pos(p: str) -> str:
         return "FWD"
     return "MID"
 
-
 def import_players(tm_to_canonical: dict) -> dict:
     stats = {"written": 0, "skipped_retired": 0, "skipped_no_club": 0,
              "skipped_youth": 0, "mapped": 0, "unmapped": 0,
-             "errors": [], "sample_headers": None}
+             "stub_clubs": 0, "errors": []}
     try:
         text = _download(PLAYERS_URL, "players")
     except Exception as e:
         return {**stats, "errors": [f"download: {e}"]}
 
     reader = csv.DictReader(io.StringIO(text))
-    stats["sample_headers"] = reader.fieldnames  # for diagnostics
-
     db = SessionLocal()
+    known_clubs = set()   # canonical ids we've already ensured exist
     try:
         for i, row in enumerate(reader):
             pid = _get(row, "player_id", "Player ID", "id")
@@ -154,7 +152,6 @@ def import_players(tm_to_canonical: dict) -> dict:
             club_id  = _get(row, "current_club_id", "Current Club ID",
                             "Current club ID", "club_id")
 
-            # Skip only if BOTH are missing
             if not club_url and not club_id:
                 stats["skipped_no_club"] += 1
                 continue
@@ -181,12 +178,28 @@ def import_players(tm_to_canonical: dict) -> dict:
                 if cid_from_url:
                     canonical = tm_to_canonical.get(str(cid_from_url))
             if not canonical:
-                # fall back to a tm: prefix so the player still lands somewhere
                 ref = club_id or _club_id_from_url(club_url) or "unknown"
                 canonical = f"tm:{ref}"
                 stats["unmapped"] += 1
             else:
                 stats["mapped"] += 1
+
+            # ── Ensure the club row exists (FK safety) ──
+            if canonical not in known_clubs:
+                # Upsert a stub club so the FK is satisfied
+                club_name = _get(row, "current_club_name", "Current Club Name",
+                                 "Current club name", "club_name") or canonical
+                upsert_club(db, {
+                    "id": canonical,
+                    "tournament_id": canonical.split(":")[0],
+                    "name": club_name,
+                    "country": "",
+                    "col": 0,
+                })
+                known_clubs.add(canonical)
+                # Only count as a stub if it's a tm: fallback, not a registry match
+                if canonical.startswith("tm:"):
+                    stats["stub_clubs"] += 1
 
             pos = _get(row, "player_main_position", "Player Main Position",
                        "position", "Position", "player_position")
@@ -207,6 +220,7 @@ def import_players(tm_to_canonical: dict) -> dict:
             stats["written"] += 1
             if stats["written"] % 2000 == 0:
                 db.commit()
+                known_clubs = set()   # reset after commit; next player rechecks
                 print(f"[tm] players committed: {stats['written']}", flush=True)
         db.commit()
     except Exception as e:
@@ -216,8 +230,10 @@ def import_players(tm_to_canonical: dict) -> dict:
         db.close()
 
     print(f"[tm] players: {stats['written']} written, "
-          f"{stats['mapped']} mapped, {stats['unmapped']} unmapped", flush=True)
+          f"{stats['mapped']} mapped, {stats['unmapped']} unmapped, "
+          f"{stats['stub_clubs']} stub clubs created", flush=True)
     return stats
+
 
 def import_all() -> dict:
     init_db()
