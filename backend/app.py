@@ -679,7 +679,28 @@ def tm_import_ep(request: Request):
         import traceback
         return {"ok": False, "error": str(e), "traceback": traceback.format_exc()}
 
-
+@app.get("/api/admin/tm-inspect")
+def tm_inspect(request: Request):
+    """Show first 5 lines of each CSV so we can see the actual columns."""
+    _admin_guard(request)
+    out = {}
+    try:
+        with httpx.Client(timeout=60, follow_redirects=True) as c:
+            for label, url in [
+                ("teams", "https://raw.githubusercontent.com/salimt/football-datasets/main/datalake/transfermarkt/team_details/team_details.csv"),
+                ("players", "https://raw.githubusercontent.com/salimt/football-datasets/main/datalake/transfermarkt/player_profiles/player_profiles.csv"),
+            ]:
+                r = c.get(url, headers={"Range": "bytes=0-2000"})
+                text = r.text or ""
+                lines = text.split("\n")[:4]
+                out[label] = {
+                    "status": r.status_code,
+                    "content_length": r.headers.get("content-length"),
+                    "lines": lines,
+                }
+        return out
+    except Exception as e:
+        return {"error": str(e)}
 # ═══════════════════════════════════════════════════════
 #  ADMIN — DB inspection
 # ═══════════════════════════════════════════════════════
