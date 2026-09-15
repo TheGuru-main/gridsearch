@@ -251,15 +251,16 @@ def import_all() -> dict:
         db.close()
 
     return {
-        "ok": not (clubs["errors"] or players["errors"]),
-        "clubs": clubs["written"],
-        "clubs_skipped_youth": clubs["skipped_youth"],
-        "clubs_mapped": clubs["mapped"],
-        "clubs_unmapped": clubs["unmapped"],
-        "players": players["written"],
-        "players_mapped": players["mapped"],
-        "players_unmapped": players["unmapped"],
-        "players_skipped_retired": players["skipped_retired"],
-        "players_skipped_no_club": players["skipped_no_club"],
-        "errors": clubs["errors"] + players["errors"],
-    }
+    "ok": not (clubs["errors"] or players["errors"]),
+    "clubs": clubs["written"],
+    "clubs_skipped_youth": clubs["skipped_youth"],
+    "clubs_mapped": clubs["mapped"],
+    "clubs_unmapped": clubs["unmapped"],
+    "players": players["written"],
+    "players_mapped": players["mapped"],
+    "players_unmapped": players["unmapped"],
+    "players_skipped_retired": players["skipped_retired"],
+    "players_skipped_no_club": players["skipped_no_club"],
+    "players_stub_clubs": players.get("stub_clubs", 0),
+    "errors": clubs["errors"] + players["errors"],
+}
