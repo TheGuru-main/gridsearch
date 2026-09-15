@@ -52,12 +52,10 @@ def _club_id_from_url(url: str) -> str:
         return url.split("/verein/")[-1].split("/")[0].split("?")[0].strip()
     return ""
 
-
 def import_clubs() -> dict:
-    """Import clubs. Returns stats plus a tm_id -> canonical_id map."""
-    stats = {"written": 0, "skipped_youth": 0, "mapped": 0, "unmapped": 0,
-             "errors": [], "tm_to_canonical": {}}
-
+    stats = {"written": 0, "skipped_youth": 0, "skipped_dup": 0,
+             "mapped": 0, "unmapped": 0, "errors": [],
+             "tm_to_canonical": {}}
     try:
         text = _download(TEAMS_URL, "teams")
     except Exception as e:
@@ -65,6 +63,7 @@ def import_clubs() -> dict:
 
     reader = csv.DictReader(io.StringIO(text))
     db = SessionLocal()
+    seen = set()
     try:
         for i, row in enumerate(reader):
             cid = _get(row, "club_id", "Club ID")
@@ -80,13 +79,15 @@ def import_clubs() -> dict:
                 stats["skipped_youth"] += 1
                 continue
 
-            # Resolve which of our tournaments this club belongs to
             tid = match_tournament(comp_slug) or match_tournament(comp_name)
-
-            # Compute the canonical ID
             canonical = canonical_club_id(tid, name, "tm", cid)
 
-            # Save the mapping for the player import step
+            # Skip duplicates within this batch
+            if canonical in seen:
+                stats["skipped_dup"] += 1
+                continue
+            seen.add(canonical)
+
             stats["tm_to_canonical"][str(cid)] = canonical
 
             if tid and canonical.startswith(f"{tid}:"):
@@ -104,6 +105,7 @@ def import_clubs() -> dict:
             stats["written"] += 1
             if stats["written"] % 500 == 0:
                 db.commit()
+                seen = set()   # reset after commit
                 print(f"[tm] clubs committed: {stats['written']}", flush=True)
         db.commit()
     except Exception as e:
@@ -113,10 +115,9 @@ def import_clubs() -> dict:
         db.close()
 
     print(f"[tm] clubs: {stats['written']} written, "
-          f"{stats['skipped_youth']} youth skipped, "
-          f"{stats['mapped']} mapped, {stats['unmapped']} unmapped", flush=True)
+          f"{stats['skipped_youth']} youth, {stats['skipped_dup']} dup, "
+          f"{stats['mapped']} mapped", flush=True)
     return stats
-
 
 def _normalize_pos(p: str) -> str:
     p = (p or "").lower()
