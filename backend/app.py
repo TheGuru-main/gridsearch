@@ -596,6 +596,33 @@ def bzz_sync_ep(request: Request):
         import traceback
         return {"ok": False, "error": str(e), "traceback": traceback.format_exc()}
 
+@app.get("/api/admin/bzz-league-info")
+def bzz_league_info(request: Request):
+    """Look up a Bzzoiro league by ID and show its name + registry match."""
+    _admin_guard(request)
+    lid = request.query_params.get("league_id", "")
+    if not lid:
+        raise HTTPException(400, "league_id required")
+    h = _bzz_headers()
+    if not h:
+        return {"error": "BZZOIRO_TOKEN not set"}
+    from registry_map import match_tournament
+    try:
+        with httpx.Client(timeout=15, headers=h) as c:
+            r = c.get(f"{BZZ_BASE}/leagues/{lid}/")
+        if r.status_code != 200:
+            return {"status": r.status_code, "error": r.text[:200]}
+        lg = r.json()
+        name = lg.get("name") or ""
+        return {
+            "id": lg.get("id"),
+            "name": name,
+            "country": lg.get("country"),
+            "current_season": (lg.get("current_season") or {}).get("name"),
+            "registry_match": match_tournament(name),
+        }
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.get("/api/admin/bzz-sync-all")
 def bzz_sync_all(request: Request):
