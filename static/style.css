@@ -386,3 +386,16 @@ input, select { width:100%; padding:0.9rem; margin:0.5rem 0; border-radius:1rem;
     margin-right: 3px;
     font-size: 0.75em;
 }
+
+.src-badge {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    vertical-align: middle;
+}
+.src-badge.db { background: rgba(0, 255, 136, 0.15); color: #00ff88; }
+.src-badge.local { background: rgba(255, 215, 0, 0.15); color: #ffd700; }
