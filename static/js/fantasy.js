@@ -144,15 +144,11 @@
         return _cachePromise[key];
     }
 
-
-
-
-
-
-
-
-
-
+/* ─── Local registry fallback — disabled (Option A) ─── */
+function getLocalPlayers(tid, cid) {
+    // Registry holds structure only. Players come from the backend DB.
+    return [];
+}
 
     /* ─── Public player fetch: async ─── */
     async function getClubPlayers(tid, cid) {
