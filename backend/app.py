@@ -644,6 +644,145 @@ def bzz_stop(request: Request):
     from bzz_sync import stop_sync
     return stop_sync()
 
+
+# ═══════════════════════════════════════════════════════
+#  TRANSFERS — GNews-powered, cached, multi-region
+# ═══════════════════════════════════════════════════════
+_transfers_cache = {"at": 0, "items": []}
+
+# Region-specific query strings. GNews supports plain text.
+_TRANSFER_QUERIES = {
+    "europe":  "football transfer Premier League OR La Liga OR Serie A OR Bundesliga OR Ligue 1",
+    "africa":  "football transfer NPFL OR CAF OR Egypt OR Morocco OR South Africa",
+    "americas":"football transfer MLS OR Liga MX OR Brasileirao OR Argentine OR Libertadores",
+    "asia":    "football transfer Saudi Pro League OR J-League OR AFC Champions League",
+    "world":   "football transfer signing OR loan OR fee agreed",
+}
+
+
+@app.get("/api/transfers/live")
+def transfers_live(region: str = "world", limit: int = 30):
+    """
+    Live transfer news from GNews. Cached 15 min per region.
+    Falls back to DB transfers table if GNews has nothing.
+    """
+    if not GNEWS_KEY:
+        return _fallback_transfers(region, limit,
+            note="GNEWS_KEY not set. Showing DB transfers only.")
+
+    key = f"live:{region}"
+    now = time.time()
+    cache_entry = _transfers_cache.get(key)
+    if cache_entry and now - cache_entry["at"] < 900 and cache_entry["items"]:
+        return {"region": region, "source": "gnews-cache", "transfers": cache_entry["items"][:limit]}
+
+    query = _TRANSFER_QUERIES.get(region, _TRANSFER_QUERIES["world"])
+
+    try:
+        with httpx.Client(timeout=20) as c:
+            r = c.get("https://gnews.io/api/v4/search", params={
+                "q": query,
+                "lang": "en",
+                "max": 30,
+                "sortby": "publishedAt",
+                "apikey": GNEWS_KEY,
+            })
+            data = r.json()
+    except Exception as e:
+        return _fallback_transfers(region, limit, note=f"GNews error: {e}")
+
+    if "errors" in data or "error" in data:
+        return _fallback_transfers(region, limit,
+            note=str(data.get("errors") or data.get("error")))
+
+    articles = data.get("articles", [])
+    items = []
+    for a in articles:
+        title = a.get("title") or ""
+        desc = a.get("description") or ""
+        # Extract player/from/to/fee from title when possible
+        player, from_club, to_club, fee = _parse_transfer(title)
+
+        items.append({
+            "player_name": player or title[:80],
+            "from_club": from_club,
+            "to_club": to_club,
+            "fee": fee,
+            "transfer_type": "news",
+            "date": (a.get("publishedAt") or "")[:10],
+            "source": (a.get("source") or {}).get("name"),
+            "url": a.get("url"),
+            "image": a.get("image"),
+            "title": title,
+            "description": desc,
+            "published_at": a.get("publishedAt"),
+        })
+
+    _transfers_cache[key] = {"at": now, "items": items}
+    return {"region": region, "source": "gnews", "transfers": items[:limit]}
+
+
+def _fallback_transfers(region: str, limit: int, note: str = ""):
+    """Read from DB if GNews gave nothing."""
+    db = SessionLocal()
+    try:
+        rows = db.query(Transfer).order_by(Transfer.date.desc()).limit(limit).all()
+        items = [
+            {
+                "player_name": r.player_name,
+                "from_club": r.from_club,
+                "to_club": r.to_club,
+                "fee": r.fee,
+                "transfer_type": r.transfer_type,
+                "date": r.date,
+                "source": r.source,
+                "url": r.source_url,
+            }
+            for r in rows
+        ]
+        return {"region": region, "source": "db", "note": note, "transfers": items}
+    finally:
+        db.close()
+
+
+def _parse_transfer(title: str):
+    """
+    Best-effort parse: 'Arsenal sign Viktor Gyokeres for £55m'
+    Returns (player, from_club, to_club, fee).
+    """
+    import re
+    player = from_club = to_club = fee = None
+
+    # Fee: £55m, €80m, $100m
+    m = re.search(r"[£€$]\s?\d+(?:\.\d+)?\s?(?:m|million|k)", title, re.IGNORECASE)
+    if m:
+        fee = m.group(0)
+
+    # 'X sign Y' or 'X signs Y' — X is destination
+    m = re.search(r"^([A-Z][\w\s\.\-]+?)\s+(?:sign|signs|complete|completed|agree|agrees|seal|seals)\s+(.+)", title)
+    if m:
+        to_club = m.group(1).strip()
+
+    # 'X join Y' — Y is destination
+    m = re.search(r"^([A-Z][\w\s\.\-]+?)\s+(?:join|joins)\s+([A-Z][\w\s\.\-]+)", title)
+    if m:
+        player = m.group(1).strip()
+        to_club = to_club or m.group(2).strip()
+
+    return player, from_club, to_club, fee
+
+
+@app.get("/api/transfers/regions")
+def transfers_regions():
+    """List available regions for the transfer widget."""
+    return {"regions": [
+        {"id": "world",    "name": "🌍 Worldwide"},
+        {"id": "europe",   "name": "🇪🇺 Europe"},
+        {"id": "africa",   "name": "🌍 Africa"},
+        {"id": "americas", "name": "🌎 Americas"},
+        {"id": "asia",     "name": "🌏 Asia"},
+    ]}
+
 # ═══════════════════════════════════════════════════════
 #  ADMIN — Transfermarkt CSV (bulk import)
 # ═══════════════════════════════════════════════════════
