@@ -588,36 +588,82 @@
             }).join("") + '</div>';
     }
 
+
+
     /* ─── Transfers ─── */
     async function renderTransfers(body) {
-        body.innerHTML = '<p class="hint">Loading transfers...</p>';
-        try {
-            const r = await fetch("/api/fantasy/transfers?days=30", { credentials: "include" });
-            const data = await r.json();
-            const list = data.transfers || [];
-            if (!list.length) {
-                body.innerHTML = '<h3>📋 Transfers</h3>' +
-                    '<p class="hint">No transfers in the last 30 days.</p>';
-                return;
-            }
-            body.innerHTML = '<h3>📋 Recent Transfers (30 days)</h3><div class="transfer-list">' +
-                list.map(function (t) {
-                    return '<div class="transfer-row">' +
-                        '<strong>' + escapeHtml(t.player_name) + '</strong>' +
-                        '<small>' + escapeHtml(t.from_club || "?") + " → " + escapeHtml(t.to_club || "?") + '</small>' +
-                        '<span>' + escapeHtml(t.fee || "—") + ' · ' + escapeHtml(t.date || "") + ' · ' + escapeHtml(t.source || "") + '</span>' +
-                        '</div>';
-                }).join("") + '</div>';
-        } catch (err) {
-            body.innerHTML = '<p class="hint">Could not load transfers: ' + escapeHtml(err.message) + '</p>';
-        }
-    }
+    body.innerHTML =
+        '<h3>📋 Live Transfers</h3>' +
+        '<div class="transfer-regions">' +
+            '<button class="region-btn active" data-region="world">🌍 All</button>' +
+            '<button class="region-btn" data-region="europe">🇪🇺 Europe</button>' +
+            '<button class="region-btn" data-region="africa">🌍 Africa</button>' +
+            '<button class="region-btn" data-region="americas">🌎 Americas</button>' +
+            '<button class="region-btn" data-region="asia">🌏 Asia</button>' +
+        '</div>' +
+        '<div id="transferListBox"><p class="hint">Loading transfers...</p></div>';
 
-    function escapeHtml(s) {
-        return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
-            return ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[c];
+    body.querySelectorAll(".region-btn").forEach(function (b) {
+        b.addEventListener("click", function (e) {
+            e.preventDefault();
+            body.querySelectorAll(".region-btn").forEach(function (x) { x.classList.remove("active"); });
+            b.classList.add("active");
+            loadRegionTransfers(b.dataset.region);
         });
+    });
+
+    loadRegionTransfers("world");
+}
+
+async function loadRegionTransfers(region) {
+    const box = document.getElementById("transferListBox");
+    if (!box) return;
+    box.innerHTML = '<p class="hint">Loading ' + region + ' transfers...</p>';
+
+    try {
+        const r = await fetch("/api/transfers/live?region=" + region + "&limit=30", { credentials: "include" });
+        const data = await r.json();
+        const items = data.transfers || [];
+
+        if (!items.length) {
+            box.innerHTML = '<p class="hint">No transfers found' +
+                (data.note ? ' — ' + escapeHtml(data.note) : '') + '.</p>';
+            return;
+        }
+
+        const srcBadge = data.source === "gnews"
+            ? '<span class="src-badge db">LIVE</span>'
+            : (data.source === "gnews-cache" ? '<span class="src-badge db">LIVE</span>'
+              : '<span class="src-badge local">CACHED</span>');
+
+        box.innerHTML =
+            '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">' +
+                '<small class="hint">' + items.length + ' stories' + srcBadge + '</small>' +
+            '</div>' +
+            '<div class="transfer-list">' +
+            items.map(function (t) {
+                const headline = t.title || (t.player_name +
+                    (t.to_club ? ' → ' + t.to_club : ''));
+                const meta = [];
+                if (t.from_club && t.to_club) meta.push(t.from_club + ' → ' + t.to_club);
+                if (t.fee) meta.push(t.fee);
+                if (t.date) meta.push(t.date);
+                if (t.source) meta.push(t.source);
+                return '<a class="transfer-row" href="' + escapeHtml(t.url || "#") +
+                    '" target="_blank" rel="noopener">' +
+                    (t.image ? '<div class="news-img" style="background-image:url(' + escapeHtml(t.image) + ')"></div>' : '') +
+                    '<div style="flex:1;min-width:0;">' +
+                        '<strong class="transfer-title">' + escapeHtml(headline) + '</strong>' +
+                        (meta.length ? '<small>' + escapeHtml(meta.join(' · ')) + '</small>' : '') +
+                        (t.description ? '<p class="news-desc">' + escapeHtml(t.description) + '</p>' : '') +
+                    '</div>' +
+                '</a>';
+            }).join("") +
+            '</div>';
+    } catch (e) {
+        box.innerHTML = '<p class="hint">Error: ' + escapeHtml(e.message) + '</p>';
     }
+}
 
     /* ─── Tab wiring ─── */
     document.addEventListener("DOMContentLoaded", function () {
