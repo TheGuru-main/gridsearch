@@ -840,6 +840,105 @@ def tm_inspect(request: Request):
         return out
     except Exception as e:
         return {"error": str(e)}
+
+
+@app.post("/api/fantasy/sync-club")
+def sync_single_club(request: Request, tid: str = "", cid: str = ""):
+    """
+    Sync one club's squad from Bzzoiro on demand.
+    Looks up the club by its registry key and finds the corresponding Bzzoiro team.
+    """
+    require_user(request, None)  # allow public; remove if you want auth-only
+
+    if not tid or not cid:
+        raise HTTPException(400, "tid and cid required")
+
+    registry_key = f"{tid}:{cid}"
+
+    # Check if club already has players — no need to resync
+    db = SessionLocal()
+    try:
+        existing = db.query(Player).filter_by(club_id=registry_key).count()
+        if existing > 0:
+            return {"ok": True, "cached": True, "players": existing, "message": "Already populated."}
+    finally:
+        db.close()
+
+    # Not in DB. Look up the club name from the registry on the frontend side
+    # by searching the bzz_* clubs table for a name match.
+    from registry_map import REGISTRY, match_club
+    t = REGISTRY.get(tid)
+    if not t:
+        raise HTTPException(404, f"Tournament '{tid}' not in registry")
+    aliases = t["clubs"].get(cid)
+    if not aliases:
+        raise HTTPException(404, f"Club '{cid}' not in registry for '{tid}'")
+
+    # Search all bzz_* clubs for a name match
+    db = SessionLocal()
+    try:
+        candidates = db.query(Club).filter(Club.id.like("bzz_%")).all()
+        target = None
+        for c in candidates:
+            if match_club(tid, c.name) == cid:
+                target = c
+                break
+        if not target:
+            # Not in DB either. Fetch from Bzzoiro and write.
+            return {"ok": False, "error": "Club not yet synced from Bzzoiro. Run Sync All from /admin.html first."}
+        bzz_club_id = target.id  # e.g. "bzz_9:755"
+    finally:
+        db.close()
+
+    # Sync the Bzzoiro squad for this one team
+    from bzz_sync import _h, BASE, _extract_list, _pos
+    import httpx, time
+    h = _h()
+    if not h:
+        raise HTTPException(500, "BZZOIRO_TOKEN not set")
+    team_id = bzz_club_id.split(":")[-1]
+
+    with httpx.Client(timeout=30, headers=h) as c:
+        r = c.get(f"{BASE}/teams/{team_id}/squad/")
+        if r.status_code != 200:
+            return {"ok": False, "error": f"Bzzoiro HTTP {r.status_code}"}
+        squad = _extract_list(r.json())
+
+    db = SessionLocal()
+    try:
+        from storage import upsert_club, upsert_player
+        # Ensure the registry club exists
+        upsert_club(db, {
+            "id": registry_key,
+            "tournament_id": tid,
+            "name": target.name,
+            "country": target.country,
+            "col": 0,
+        })
+        count = 0
+        for p in squad:
+            if not isinstance(p, dict):
+                continue
+            pid = p.get("id")
+            if not pid:
+                continue
+            upsert_player(db, {
+                "id": f"{registry_key}:{pid}",
+                "name": p.get("name") or "",
+                "position": _pos(p.get("position")),
+                "club_id": registry_key,
+                "tournament_id": tid,
+                "number": p.get("shirt_number"),
+                "nationality": p.get("nationality"),
+                "market_value": p.get("market_value"),
+                "photo_url": p.get("image_url"),
+            })
+            count += 1
+        db.commit()
+        return {"ok": True, "players": count, "registry_key": registry_key}
+    finally:
+        db.close()
+
 # ═══════════════════════════════════════════════════════
 #  ADMIN — DB inspection
 # ═══════════════════════════════════════════════════════
