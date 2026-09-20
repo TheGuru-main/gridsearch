@@ -267,7 +267,6 @@ function getLocalPlayers(tid, cid) {
         const t = getTournament(tid);
         const club = t ? t.clubs.find(function (c) { return c.id === cid; }) : null;
         if (!club) { body.innerHTML = '<p class="hint">Club not found.</p>'; return; }
-
         // Loading state
         body.innerHTML =
             '<a href="#" class="back-btn" id="back">← ' + escapeHtml(t.name) + '</a>' +
@@ -283,16 +282,46 @@ function getLocalPlayers(tid, cid) {
         const balance = OpenBox.App?.currentUser?.byflints || 0;
 
         if (!players.length) {
-            body.innerHTML =
-                '<a href="#" class="back-btn" id="back">← ' + escapeHtml(t.name) + '</a>' +
-                '<h3>' + escapeHtml(club.name) + '</h3>' +
-                '<p class="hint">No players found for this club yet. ' +
-                'Run the scraper from <code>/admin.html</code> to populate this club.</p>';
-            document.getElementById("back").addEventListener("click", function (e) {
-                e.preventDefault(); renderClubs(body, tid);
-            });
-            return;
+    body.innerHTML =
+        '<a href="#" class="back-btn" id="back">← ' + escapeHtml(t.name) + '</a>' +
+        '<h3>' + escapeHtml(club.name) + '</h3>' +
+        '<div class="empty-roster">' +
+            '<p class="hint">Roster not yet available for this club.</p>' +
+            '<p class="hint">You can request an immediate sync — it takes 10–30 seconds.</p>' +
+            '<button class="primary-btn" id="syncClubBtn">' +
+                '<i class="fa-solid fa-rotate"></i> Sync this club now' +
+            '</button>' +
+            '<div id="syncClubStatus" class="hint" style="margin-top:10px;"></div>' +
+        '</div>';
+    document.getElementById("back").addEventListener("click", function (e) {
+        e.preventDefault(); renderClubs(body, tid);
+    });
+    document.getElementById("syncClubBtn").addEventListener("click", async function (e) {
+        e.preventDefault();
+        var status = document.getElementById("syncClubStatus");
+        var btn = document.getElementById("syncClubBtn");
+        btn.disabled = true;
+        status.textContent = "Syncing " + club.name + "...";
+        try {
+            var r = await fetch("/api/fantasy/sync-club?tid=" + encodeURIComponent(tid) +
+                                "&cid=" + encodeURIComponent(cid), { method: "POST", credentials: "include" });
+            var data = await r.json();
+            if (data.ok) {
+                status.textContent = "Fetched " + (data.players || 0) + " players. Reloading...";
+                // Clear cache for this club so the next fetch sees the new data
+                if (OpenBox.Fantasy.clearPlayerCache) OpenBox.Fantasy.clearPlayerCache();
+                setTimeout(function () { renderPlayers(body, tid, cid); }, 800);
+            } else {
+                status.textContent = "Sync failed: " + (data.error || "unknown");
+                btn.disabled = false;
+            }
+        } catch (err) {
+            status.textContent = "Error: " + err.message;
+            btn.disabled = false;
         }
+    });
+    return;
+}
 
         const sourceBadge = players[0].source === "db"
             ? '<span class="src-badge db">LIVE</span>'
