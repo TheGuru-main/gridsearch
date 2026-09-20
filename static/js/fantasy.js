@@ -144,30 +144,15 @@
         return _cachePromise[key];
     }
 
-    /* ─── Local registry fallback ─── */
-    function getLocalPlayers(tid, cid) {
-        const t = OpenBox.FantasyRegistry?.tournaments?.[tid];
-        if (!t) return [];
-        const clubs = Array.isArray(t.clubs) ? t.clubs : [];
-        const club = clubs.find(function (c) { return c.id === cid; });
-        if (!club) return [];
-        const raw = Array.isArray(club.players) ? club.players : [];
-        return raw.map(function (p, i) {
-            const pos = normPos(p.pos);
-            return {
-                id: tid + ":" + cid + ":" + i,
-                name: p.name || ("Player " + (i + 1)),
-                pos: pos,
-                price: priceFor(tid, p.name, pos),
-                points: 0,
-                club_id: cid,
-                club_name: club.name || cid,
-                tournament_id: tid,
-                tournament_name: t.name || tid,
-                source: "registry"
-            };
-        });
-    }
+
+
+
+
+
+
+
+
+
 
     /* ─── Public player fetch: async ─── */
     async function getClubPlayers(tid, cid) {
