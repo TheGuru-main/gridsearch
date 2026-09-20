@@ -117,6 +117,22 @@ class Transfer(Base):
     )
 
 
+
+class SyncState(Base):
+    __tablename__ = "sync_state"
+    id = Column(String(32), primary_key=True)         # e.g. "bzz_all"
+    running = Column(Integer, default=0)              # 0 or 1
+    current_index = Column(Integer, default=0)
+    total_leagues = Column(Integer, default=0)
+    candidate_ids = Column(Text)                      # JSON list of league ids
+    completed_ids = Column(Text)                      # JSON list
+    clubs_written = Column(Integer, default=0)
+    players_written = Column(Integer, default=0)
+    mapped_clubs = Column(Integer, default=0)
+    errors = Column(Text)                             # JSON list
+    started_at = Column(Float)
+    updated_at = Column(Float)
+
 class SyncLog(Base):
     __tablename__ = "sync_log"
 
@@ -126,3 +142,4 @@ class SyncLog(Base):
     count = Column(Integer, default=0)
     message = Column(Text)
     ran_at = Column(Float, default=time.time)
+
