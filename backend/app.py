@@ -904,6 +904,17 @@ def db_wipe_all(request: Request):
         db.close()
 
 
+@app.post("/api/admin/db-wipe-transfers")
+def db_wipe_transfers(request: Request):
+    _admin_guard(request)
+    db = SessionLocal()
+    try:
+        n = db.query(Transfer).delete()
+        db.commit()
+        return {"ok": True, "deleted": n}
+    finally:
+        db.close()
+
 # ═══════════════════════════════════════════════════════
 #  STATIC — feedfront
 # ═══════════════════════════════════════════════════════
