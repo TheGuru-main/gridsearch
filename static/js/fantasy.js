@@ -408,6 +408,7 @@
         if (el) el.textContent = Number(OpenBox.App?.currentUser?.byflints || 0).toFixed(2);
     }
 
+   
     /* ─── Squad view ─── */
     function renderSquad(body) {
         const squad = loadSquad() || emptySquad();
@@ -446,4 +447,249 @@
                                 '<div class="sr-left"><strong>' + escapeHtml(p.name) + '</strong>' +
                                 '<small>' + escapeHtml(p.club_name) + ' · ' + escapeHtml(p.tournament_name) + '</small></div>' +
                                 '<div class="sr-right">' +
+                                    '<span class="price-tag">' + p.price + ' bf</span>' +
+                                    '<a href="#" class="capt-btn ' + (squad.captain === p.id ? "active" : "") + '" data-cid="' + p.id + '">C</a>' +
+                                    '<a href="#" class="vice-btn ' + (squad.vice === p.id ? "active" : "") + '" data-vid="' + p.id + '">V</a>' +
+                                    '<a href="#" class="rm-btn" data-rid="' + p.id + '">✕</a>' +
+                                '</div></div>';
+                        }).join("") +
+                    '</div>';
+            }).join("") || '<p class="hint">No players yet. Tap + on any player to add.</p>') +
+            (squad.players.length ? '<a href="#" class="primary-btn" id="viewTeamBtn">View Team Sheet →</a>' : '');
+
+        const nameInput = document.getElementById("squadName");
+        if (nameInput) nameInput.addEventListener("input", function (e) {
+            squad.name = e.target.value;
+            squad.gsp_row = computeTeamRow(squad.name, OpenBox.App.currentUser?.phone);
+            saveSquad(squad);
+        });
+        const formSel = document.getElementById("squadFormation");
+        if (formSel) formSel.addEventListener("change", function (e) {
+            squad.formation = e.target.value;
+            saveSquad(squad);
+            alert("Formation set to " + squad.formation);
+        });
+        body.querySelectorAll(".capt-btn").forEach(function (b) {
+            b.addEventListener("click", function (e) {
+                e.preventDefault(); squad.captain = b.dataset.cid; saveSquad(squad); render();
+            });
+        });
+        body.querySelectorAll(".vice-btn").forEach(function (b) {
+            b.addEventListener("click", function (e) {
+                e.preventDefault(); squad.vice = b.dataset.vid; saveSquad(squad); render();
+            });
+        });
+        body.querySelectorAll(".rm-btn").forEach(function (b) {
+            b.addEventListener("click", function (e) {
+                e.preventDefault();
+                if (!confirm("Remove player and refund byflints?")) return;
+                removePlayerFromSquad(b.dataset.rid);
+                render();
+            });
+        });
+        const vt = document.getElementById("viewTeamBtn");
+        if (vt) vt.addEventListener("click", function (e) {
+            e.preventDefault(); setView("team");
+        });
+    }
+
+    /* ─── Team sheet ─── */
+    function renderTeam(body) {
+        const squad = loadSquad() || emptySquad();
+        const form = squad.formation || "4-4-2";
+        const parts = form.split("-").map(Number);
+        const def = parts[0] || 4, mid = parts[1] || 4, fwd = parts[2] || 2;
+
+        const byPos = { GK: [], DEF: [], MID: [], FWD: [] };
+        squad.players.forEach(function (p) {
+            if (!byPos[p.pos]) byPos[p.pos] = [];
+            byPos[p.pos].push(p);
+        });
+
+        const startingXI = {
+            GK: byPos.GK.slice(0, 1),
+            DEF: byPos.DEF.slice(0, def),
+            MID: byPos.MID.slice(0, mid),
+            FWD: byPos.FWD.slice(0, fwd)
+        };
+        const starters = [].concat(startingXI.GK, startingXI.DEF, startingXI.MID, startingXI.FWD);
+        const starterIds = new Set(starters.map(function (p) { return p.id; }));
+        const bench = squad.players.filter(function (p) { return !starterIds.has(p.id); });
+
+        function chip(p) {
+            return '<div class="pitch-player ' +
+                (squad.captain === p.id ? "captain" : "") + ' ' +
+                (squad.vice === p.id ? "vice" : "") + '">' +
+                '<strong>' + escapeHtml(p.name.split(" ").slice(-1)[0]) + '</strong>' +
+                '<small>' + p.pos + ' · ' + p.price + '</small>' +
+                (squad.captain === p.id ? '<span class="badge c">C</span>' : '') +
+                (squad.vice === p.id ? '<span class="badge v">V</span>' : '') +
+                '</div>';
+        }
+
+        body.innerHTML =
+            '<a href="#" class="back-btn" id="back">← My Squad</a>' +
+            '<div class="team-sheet-header"><h3>' + escapeHtml(squad.name) + '</h3>' +
+            '<small>' + form + ' · GSP row ' + (squad.gsp_row || "—") + '</small></div>' +
+            '<div class="pitch">' +
+                '<div class="pitch-row fwd">' + startingXI.FWD.map(chip).join("") + '</div>' +
+                '<div class="pitch-row mid">' + startingXI.MID.map(chip).join("") + '</div>' +
+                '<div class="pitch-row def">' + startingXI.DEF.map(chip).join("") + '</div>' +
+                '<div class="pitch-row gk">' + startingXI.GK.map(chip).join("") + '</div>' +
+            '</div>' +
+            '<h4 class="pos-header">Bench · ' + bench.length + '</h4>' +
+            '<div class="bench-list">' +
+                (bench.length
+                    ? bench.map(function (p) {
+                        return '<div class="bench-item">' + escapeHtml(p.name) + ' <small>' + p.pos + '</small></div>';
+                    }).join("")
+                    : '<p class="hint">No bench players.</p>') +
+            '</div>';
+
+        document.getElementById("back").addEventListener("click", function (e) {
+            e.preventDefault(); setView("squad");
+        });
+    }
+
+    /* ─── Hot ─── */
+    async function renderHot(body) {
+        body.innerHTML = '<p class="hint">Loading hot players...</p>';
+        const list = getTournaments();
+        if (!list.length) { body.innerHTML = '<p class="hint">No data.</p>'; return; }
+
+        const week = Math.floor(Date.now() / (7 * 86400000));
+        const rows = [];
+        for (const t of list) {
+            const tour = OpenBox.FantasyRegistry.tournaments[t.id];
+            if (!tour || !Array.isArray(tour.clubs) || !tour.clubs.length) continue;
+            const firstClub = tour.clubs[0];
+            try {
+                const players = await getClubPlayers(t.id, firstClub.id);
+                if (!players.length) continue;
+                const scored = players.map(function (p) {
+                    if (p.points) return { p: p, pts: Number(p.points) };
+                    const h = (p.id + ":" + week).split("").reduce(function (s, c) { return (s * 31 + c.charCodeAt(0)) >>> 0; }, 0);
+                    return { p: p, pts: (h % 120) / 10 + 1 };
+                });
+                const top = scored.reduce(function (a, b) { return b.pts > a.pts ? b : a; });
+                rows.push({ tid: t.id, tournament: t.name, player: top.p, pts: top.pts.toFixed(1) });
+            } catch (e) { /* skip tournament */ }
+        }
+
+        if (!rows.length) {
+            body.innerHTML = '<p class="hint">Hot list populates once clubs have players. Run the scraper from /admin.html.</p>';
+            return;
+        }
+
+        rows.sort(function (a, b) { return parseFloat(b.pts) - parseFloat(a.pts); });
+
+        body.innerHTML =
+            '<h3>🔥 Hot This Week</h3><div class="hot-list">' +
+            rows.slice(0, 20).map(function (r) {
+                return '<div class="hot-player">' +
+                    '<div><strong>' + escapeHtml(r.player.name) + '</strong>' +
+                    '<small>' + escapeHtml(r.tournament) + ' · ' + r.player.pos + '</small></div>' +
+                    '<div class="hot-pts">' + r.pts + ' pts<br><small>' + r.player.price + ' bf</small></div>' +
+                    '</div>';
+            }).join("") + '</div>';
+    }
+
+    /* ─── Transfers ─── */
+    async function renderTransfers(body) {
+        body.innerHTML =
+            '<h3>📋 Live Transfers</h3>' +
+            '<div class="transfer-regions">' +
+                '<button class="region-btn active" data-region="world">🌍 All</button>' +
+                '<button class="region-btn" data-region="europe">🇪🇺 Europe</button>' +
+                '<button class="region-btn" data-region="africa">🌍 Africa</button>' +
+                '<button class="region-btn" data-region="americas">🌎 Americas</button>' +
+                '<button class="region-btn" data-region="asia">🌏 Asia</button>' +
+            '</div>' +
+            '<div id="transferListBox"><p class="hint">Loading transfers...</p></div>';
+
+        body.querySelectorAll(".region-btn").forEach(function (b) {
+            b.addEventListener("click", function (e) {
+                e.preventDefault();
+                body.querySelectorAll(".region-btn").forEach(function (x) { x.classList.remove("active"); });
+                b.classList.add("active");
+                loadRegionTransfers(b.dataset.region);
+            });
+        });
+
+        loadRegionTransfers("world");
+    }
+
+    async function loadRegionTransfers(region) {
+        const box = document.getElementById("transferListBox");
+        if (!box) return;
+        box.innerHTML = '<p class="hint">Loading ' + region + ' transfers...</p>';
+
+        try {
+            const r = await fetch("/api/transfers/live?region=" + region + "&limit=30", { credentials: "include" });
+            const data = await r.json();
+            const items = data.transfers || [];
+
+            if (!items.length) {
+                box.innerHTML = '<p class="hint">No transfers found' +
+                    (data.note ? ' — ' + escapeHtml(data.note) : '') + '.</p>';
+                return;
+            }
+
+            const srcBadge = data.source === "gnews"
+                ? '<span class="src-badge db">LIVE</span>'
+                : (data.source === "gnews-cache" ? '<span class="src-badge db">LIVE</span>'
+                  : '<span class="src-badge local">CACHED</span>');
+
+            box.innerHTML =
+                '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">' +
+                    '<small class="hint">' + items.length + ' stories' + srcBadge + '</small>' +
+                '</div>' +
+                '<div class="transfer-list">' +
+                items.map(function (t) {
+                    const headline = t.title || (t.player_name +
+                        (t.to_club ? ' → ' + t.to_club : ''));
+                    const meta = [];
+                    if (t.from_club && t.to_club) meta.push(t.from_club + ' → ' + t.to_club);
+                    if (t.fee) meta.push(t.fee);
+                    if (t.date) meta.push(t.date);
+                    if (t.source) meta.push(t.source);
+                    return '<a class="transfer-row" href="' + escapeHtml(t.url || "#") +
+                        '" target="_blank" rel="noopener">' +
+                        (t.image ? '<div class="news-img" style="background-image:url(' + escapeHtml(t.image) + ')"></div>' : '') +
+                        '<div style="flex:1;min-width:0;">' +
+                            '<strong class="transfer-title">' + escapeHtml(headline) + '</strong>' +
+                            (meta.length ? '<small>' + escapeHtml(meta.join(' · ')) + '</small>' : '') +
+                            (t.description ? '<p class="news-desc">' + escapeHtml(t.description) + '</p>' : '') +
+                        '</div>' +
+                    '</a>';
+                }).join("") +
+                '</div>';
+        } catch (e) {
+            box.innerHTML = '<p class="hint">Error: ' + escapeHtml(e.message) + '</p>';
+        }
+    }
+
+    /* ─── Tab wiring ─── */
+    document.addEventListener("DOMContentLoaded", function () {
+        document.querySelectorAll(".ftab").forEach(function (t) {
+            t.addEventListener("click", function (e) {
+                e.preventDefault();
+                setView(t.dataset.ftab);
+            });
+        });
+    });
+
+    OpenBox.Fantasy = {
+        show: show,
+        loadSquad: loadSquad,
+        saveSquad: saveSquad,
+        emptySquad: emptySquad,
+        loadRegionTransfers: loadRegionTransfers,
+        clearPlayerCache: function () {
+            Object.keys(_playerCache).forEach(function (k) { delete _playerCache[k]; });
+            Object.keys(_cachePromise).forEach(function (k) { delete _cachePromise[k]; });
+        }
+    };
+
+})();
        
