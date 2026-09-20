@@ -905,6 +905,16 @@ def db_counts(request: Request):
     finally:
         db.close()
 
+@app.get("/api/admin/db-create-tables")
+def db_create_tables(request: Request):
+    _admin_guard(request)
+    import models
+    from database import engine, Base
+    from sqlalchemy import inspect
+    Base.metadata.create_all(bind=engine)
+    insp = inspect(engine)
+    return {"tables": sorted(insp.get_table_names())}
+
 
 @app.get("/api/admin/db-logs")
 def db_logs(request: Request):
