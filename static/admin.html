@@ -509,6 +509,15 @@ code {
         counts();
     }
 
+async function wipeTransfers() {
+    if (!confirm('Delete all transfers from DB?')) return;
+    try {
+        const r = await fetch(`/api/admin/db-wipe-transfers?token=${tok()}`, { method: "POST" });
+        out('dbWipeT', await r.json());
+    } catch (e) { out('dbWipeT', 'Error: ' + e.message, true); }
+}
+window.wipeTransfers = wipeTransfers;
+
     // ═══════════════════════════════════════════════
     //  BOOTSTRAP
     // ═══════════════════════════════════════════════
