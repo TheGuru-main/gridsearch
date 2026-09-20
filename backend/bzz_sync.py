@@ -10,10 +10,9 @@ import json
 import threading
 import httpx
 from database import SessionLocal, init_db
-from storage import upsert_club, upsert_player, log_sync
+from storage import upsert_club, upsert_player, log_sync, delete_players_by_name
 from registry_map import match_tournament, match_club, canonical_club_id
 from models import SyncState
-from sqlalchemy import text
 
 BASE = "https://sports.bzzoiro.com/api/v2"
 
@@ -28,7 +27,7 @@ SKIP_TOKENS = [
 
 
 # ═══════════════════════════════════════════════════════
-#  STATE HELPERS (persisted to DB)
+#  STATE — persisted in DB, survives restarts
 # ═══════════════════════════════════════════════════════
 def _load_state(db) -> SyncState:
     s = db.get(SyncState, "bzz_all")
@@ -61,8 +60,6 @@ def get_state() -> dict:
         s = _load_state(db)
         completed = json.loads(s.completed_ids or "[]")
         errors = json.loads(s.errors or "[]")
-
-        # Build a name map from candidates
         candidates = json.loads(s.candidate_ids or "[]")
         name_map = {c["id"]: c.get("name", "") for c in candidates}
 
@@ -73,7 +70,7 @@ def get_state() -> dict:
             "current_index": s.current_index or 0,
             "total_leagues": s.total_leagues or 0,
             "current_league_id": None,
-            "current_league_name": None,
+            "current_league_name": name_map.get(s.current_index),
             "current_registry_match": None,
             "leagues_completed": [
                 {"id": i, "name": name_map.get(i, "")} for i in completed
@@ -97,7 +94,7 @@ def stop_sync():
         s.running = 0
         s.updated_at = time.time()
         db.commit()
-        return {"ok": True, "message": "Stop requested."}
+        return {"ok": True, "message": "Stop requested. Finishing current team."}
     finally:
         db.close()
 
@@ -161,19 +158,6 @@ def _fetch_league_name(client, league_id: int) -> str:
     return ""
 
 
-def _dedup_old_club_membership(db, player_name):
-    """
-    If a TM-sourced player with this name exists, delete it.
-    Prevents the same player showing in old and new clubs after a transfer.
-    """
-    if not player_name:
-        return
-    db.execute(text("""
-        DELETE FROM players
-        WHERE name = :n AND id LIKE 'tm:%'
-    """), {"n": player_name})
-
-
 # ═══════════════════════════════════════════════════════
 #  SYNC ONE LEAGUE
 # ═══════════════════════════════════════════════════════
@@ -183,6 +167,7 @@ def sync_league(league_id: int, league_name: str = None,
     Sync one Bzzoiro league:
     1. GET /api/v2/teams/?league_id=N   → club rows
     2. GET /api/v2/teams/{id}/squad/    → player rows
+    Deduplicates players across clubs (removes old Transfermarkt row after transfer).
     """
     h = _h()
     if not h:
@@ -200,6 +185,7 @@ def sync_league(league_id: int, league_name: str = None,
             league_name = _fetch_league_name(probe, league_id)
             stats["league_name"] = league_name
 
+    # Match against the registry
     registry_tid = match_tournament(league_name) if league_name else None
     stats["registry_match"] = registry_tid
     source_key = f"bzz_{league_id}"
@@ -274,10 +260,14 @@ def sync_league(league_id: int, league_name: str = None,
                         pid = p.get("id")
                         if not pid:
                             continue
-                        pname = p.get("name") or ""
-                        # Prevent old-club duplicates after transfers
-                        _dedup_old_club_membership(db, pname)
 
+                        pname = p.get("name") or ""
+
+                        # Remove stale Transfermarkt rows with the same name
+                        # so players who moved don't show under both old and new clubs.
+                        delete_players_by_name(db, pname, only_source_prefix="tm:%")
+
+                        # upsert_player auto-creates the club if missing (FK safety)
                         upsert_player(db, {
                             "id": f"{canonical}:{pid}",
                             "name": pname,
@@ -321,7 +311,7 @@ def sync_league(league_id: int, league_name: str = None,
 def _run_sync_all(resume: bool = False):
     """
     Walk every active Bzzoiro league.
-    Progress is written to sync_state after each league, so a Render restart
+    Progress is written to sync_state after each league so a Render restart
     does not lose ground. On boot, app.py calls this with resume=True.
     """
     db = SessionLocal()
@@ -333,6 +323,7 @@ def _run_sync_all(resume: bool = False):
 
         s.running = 1
         if not resume or not s.started_at:
+            # Fresh run — reset counters
             s.started_at = time.time()
             s.completed_ids = "[]"
             s.candidate_ids = "[]"
@@ -345,7 +336,7 @@ def _run_sync_all(resume: bool = False):
         s.updated_at = time.time()
         db.commit()
 
-        # ── Build candidate list (only on fresh run) ──
+        # Build candidate list (only on fresh run)
         candidates = json.loads(s.candidate_ids or "[]")
         if not candidates:
             h = _h()
@@ -373,7 +364,7 @@ def _run_sync_all(resume: bool = False):
         completed = set(json.loads(s.completed_ids or "[]"))
         db.close()
 
-        # ── Iterate ──
+        # Iterate remaining leagues
         for idx, lg in enumerate(candidates):
             if lg["id"] in completed:
                 continue
@@ -423,7 +414,7 @@ def _run_sync_all(resume: bool = False):
                 finally:
                     upd.close()
 
-        # ── All done ──
+        # All done
         fin = SessionLocal()
         try:
             st = fin.get(SyncState, "bzz_all")
