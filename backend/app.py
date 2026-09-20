@@ -807,8 +807,47 @@ def bzz_league_info(request: Request):
 @app.get("/api/admin/bzz-sync-all")
 def bzz_sync_all(request: Request):
     _admin_guard(request)
-    from bzz_sync import start_sync_all
-    return start_sync_all()
+    import traceback
+    try:
+        # Step 1 — verify SyncState is registered on Base
+        from database import engine, Base
+        import models
+        from sqlalchemy import inspect
+        insp = inspect(engine)
+        tables = sorted(insp.get_table_names())
+        if "sync_state" not in tables:
+            # Try to create it now
+            Base.metadata.create_all(bind=engine)
+            insp = inspect(engine)
+            tables = sorted(insp.get_table_names())
+
+        # Step 2 — verify the class is usable
+        from bzz_sync import start_sync_all, _load_state
+        from database import SessionLocal
+        db = SessionLocal()
+        try:
+            s = _load_state(db)
+            state_ok = True
+            state_id = s.id
+        finally:
+            db.close()
+
+        # Step 3 — start the background thread
+        result = start_sync_all()
+
+        return {
+            "ok": True,
+            "tables": tables,
+            "sync_state_ok": state_ok,
+            "sync_state_id": state_id,
+            "start_result": result,
+        }
+    except Exception as e:
+        return {
+            "ok": False,
+            "error": str(e),
+            "traceback": traceback.format_exc(),
+        }
 
 
 @app.get("/api/admin/bzz-progress")
