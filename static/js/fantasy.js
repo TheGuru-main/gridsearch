@@ -674,15 +674,16 @@ async function loadRegionTransfers(region) {
             });
         });
     });
-
-    OpenBox.Fantasy = {
-        show: show,
-        loadSquad: loadSquad,
-        saveSquad: saveSquad,
-        emptySquad: emptySquad,
-        clearPlayerCache: function () {
-            Object.keys(_playerCache).forEach(function (k) { delete _playerCache[k]; });
-            Object.keys(_cachePromise).forEach(function (k) { delete _cachePromise[k]; });
-        }
-    };
+OpenBox.Fantasy = {
+    show: show,
+    loadSquad: loadSquad,
+    saveSquad: saveSquad,
+    emptySquad: emptySquad,
+    loadRegionTransfers: loadRegionTransfers,
+    clearPlayerCache: function () {
+        Object.keys(_playerCache).forEach(function (k) { delete _playerCache[k]; });
+        Object.keys(_cachePromise).forEach(function (k) { delete _cachePromise[k]; });
+    }
+};
+    
 })();
