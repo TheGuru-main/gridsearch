@@ -323,9 +323,9 @@ function getLocalPlayers(tid, cid) {
     return;
 }
 
-        const sourceBadge = players[0].source === "db"
-            ? '<span class="src-badge db">LIVE</span>'
-            : '<span class="src-badge local">REGISTRY</span>';
+        const sourceBadge = (players[0] && players[0].source === "db")
+    ? '<span class="src-badge db">LIVE</span>'
+    : '<span class="src-badge local">REGISTRY</span>';
 
         body.innerHTML =
             '<a href="#" class="back-btn" id="back">← ' + escapeHtml(t.name) + '</a>' +
