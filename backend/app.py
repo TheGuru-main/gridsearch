@@ -244,6 +244,40 @@ def me(request: Request, db: Session = Depends(get_db)):
     }
 
 
+
+@app.on_event("startup")
+def on_startup():
+    init_db()
+
+    # Schema drift guard: add missing columns to sync_state
+    from sqlalchemy import text
+    db = SessionLocal()
+    try:
+        db.execute(text("""
+            ALTER TABLE sync_state ADD COLUMN IF NOT EXISTS unmapped_clubs INTEGER DEFAULT 0
+        """))
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
+
+    # Resume interrupted Bzzoiro sync
+    try:
+        from bzz_sync import _run_sync_all
+        db = SessionLocal()
+        try:
+            s = db.get(SyncState, "bzz_all")
+            if s and s.running == 1:
+                print("[startup] resuming interrupted Bzzoiro sync", flush=True)
+                threading.Thread(target=_run_sync_all, args=(True,), daemon=True).start()
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"[startup] resume check failed: {e}", flush=True)
+
+
+
 # ═══════════════════════════════════════════════════════
 #  WALLET
 # ═══════════════════════════════════════════════════════
