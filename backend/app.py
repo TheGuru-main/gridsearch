@@ -1,13 +1,15 @@
 """
 GSP OpenBox + Fantasy — combined backend.
 - Auth, wallet, OpenBox items, fantasy
-- Multi-source scraper admin (Transfermarkt CSV + Bzzoiro)
+- Multi-source scraper admin (Transfermarkt CSV + Bzzoiro, resumable)
 - News via GNews
 - BubbleJumbo middleware wraps everything
 """
 import os
 import time
 import uuid
+import json
+import threading
 import hashlib
 import httpx
 from pathlib import Path
@@ -21,7 +23,7 @@ from sqlalchemy.orm import Session
 from database import get_db, init_db, SessionLocal
 from models import (
     User, SessionToken, LedgerEntry, OpenBoxItem,
-    Club, Player, Transfer, SyncLog
+    Club, Player, Transfer, SyncLog, SyncState
 )
 from bubblejumbo_middleware import BubbleJumboMiddleware, bj_bridge
 
@@ -76,7 +78,6 @@ def hash_password(p: str) -> str:
 
 
 def current_gameweek() -> int:
-    # FIX: was "2026-26-01" — invalid month
     epoch = time.mktime(time.strptime("2026-01-01", "%Y-%m-%d"))
     return int((time.time() - epoch) // (7 * 86400)) + 1
 
@@ -142,6 +143,19 @@ app.include_router(bj_bridge)
 @app.on_event("startup")
 def on_startup():
     init_db()
+    # Resume interrupted Bzzoiro sync
+    try:
+        from bzz_sync import _run_sync_all
+        db = SessionLocal()
+        try:
+            s = db.get(SyncState, "bzz_all")
+            if s and s.running == 1:
+                print("[startup] resuming interrupted Bzzoiro sync", flush=True)
+                threading.Thread(target=_run_sync_all, args=(True,), daemon=True).start()
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"[startup] resume check failed: {e}", flush=True)
 
 
 # ═══════════════════════════════════════════════════════
@@ -439,480 +453,78 @@ def hot_players(db: Session = Depends(get_db)):
     return {"week": week, "hot": out}
 
 
-# ═══════════════════════════════════════════════════════
-#  NEWS — proxied from GNews with 15-min in-memory cache
-# ═══════════════════════════════════════════════════════
-_news_cache = {"at": 0, "items": []}
-
-
-@app.get("/api/news")
-def get_news(category: str = "sports", limit: int = 25):
-    if not GNEWS_KEY:
-        return {"news": [], "note": "GNEWS_KEY not set on server. Add it to Render environment."}
-
-    now = time.time()
-    if now - _news_cache["at"] < 900 and _news_cache["items"]:
-        return {"news": _news_cache["items"][:limit]}
-
-    try:
-        with httpx.Client(timeout=15) as c:
-            r = c.get("https://gnews.io/api/v4/top-headlines", params={
-                "category": category,
-                "lang": "en",
-                "max": 25,
-                "apikey": GNEWS_KEY,
-            })
-            data = r.json()
-            if "errors" in data or "error" in data:
-                return {"news": [], "error": str(data.get("errors") or data.get("error"))}
-            items = []
-            for a in data.get("articles", []):
-                items.append({
-                    "title": a.get("title"),
-                    "description": a.get("description"),
-                    "url": a.get("url"),
-                    "image": a.get("image"),
-                    "source": (a.get("source") or {}).get("name"),
-                    "published_at": a.get("publishedAt"),
-                    "content": a.get("content"),
-                })
-            _news_cache["items"] = items
-            _news_cache["at"] = now
-            return {"news": items[:limit]}
-    except Exception as e:
-        return {"news": [], "error": str(e)}
-
-
-# ═══════════════════════════════════════════════════════
-#  HEALTH
-# ═══════════════════════════════════════════════════════
-@app.get("/api/health")
-def health():
-    return {"ok": True, "gameweek": current_gameweek()}
-
-
-# ═══════════════════════════════════════════════════════
-#  ADMIN — scraper environment diagnostic
-# ═══════════════════════════════════════════════════════
-@app.get("/api/admin/scraper-diag")
-def admin_scraper_diag(request: Request):
-    _admin_guard(request)
-
-    report = {"env": {}, "imports": {}}
-
-    report["env"]["DATABASE_URL_set"] = bool(os.environ.get("DATABASE_URL"))
-    report["env"]["GNEWS_KEY_set"] = bool(GNEWS_KEY)
-    report["env"]["BZZOIRO_TOKEN_set"] = bool(os.environ.get("BZZOIRO_TOKEN"))
-    report["env"]["SCRAPER_TOKEN_set"] = bool(os.environ.get("SCRAPER_TOKEN"))
-
-    try:
-        from database import engine
-        report["imports"]["database"] = "ok"
-        report["db_host"] = str(engine.url).split("@")[-1] if "@" in str(engine.url) else "?"
-    except Exception as e:
-        report["imports"]["database"] = f"FAIL: {e}"
-
-    try:
-        import models
-        report["imports"]["models"] = "ok"
-    except Exception as e:
-        report["imports"]["models"] = f"FAIL: {e}"
-
-    try:
-        import tm_import
-        report["imports"]["tm_import"] = "ok"
-    except Exception as e:
-        report["imports"]["tm_import"] = f"FAIL: {e}"
-
-    try:
-        import bzz_sync
-        report["imports"]["bzz_sync"] = "ok"
-    except Exception as e:
-        report["imports"]["bzz_sync"] = f"FAIL: {e}"
-
-    try:
-        import httpx, csv
-        report["imports"]["deps"] = "ok"
-    except Exception as e:
-        report["imports"]["deps"] = f"FAIL: {e}"
-
-    return report
-
-# ═══════════════════════════════════════════════════════
-#  ADMIN — Bzzoiro (live squads)
-# ═══════════════════════════════════════════════════════
-@app.get("/api/admin/bzz-test")
-def bzz_test(request: Request):
-    _admin_guard(request)
-    h = _bzz_headers()
-    if not h:
-        return {"error": "BZZOIRO_TOKEN not set on Render. Register at sports.bzzoiro.com/register, then add env var."}
-    try:
-        with httpx.Client(timeout=15) as c:
-            r = c.get(f"{BZZ_BASE}/leagues/", headers=h)
-        return {"status": r.status_code, "body": r.json()}
-    except Exception as e:
-        return {"status": "error", "error": str(e)}
-
-
-@app.get("/api/admin/bzz-leagues")
-def bzz_leagues(request: Request):
-    _admin_guard(request)
-    h = _bzz_headers()
-    if not h:
-        return {"error": "BZZOIRO_TOKEN not set"}
-    results = []
-    url = f"{BZZ_BASE}/leagues/"
-    try:
-        with httpx.Client(timeout=20) as c:
-            while url and len(results) < 300:
-                r = c.get(url, headers=h)
-                if r.status_code != 200:
-                    break
-                data = r.json()
-                results.extend(data.get("results") or [])
-                url = data.get("next")
-        return {
-            "count": len(results),
-            "leagues": [
-                {"id": l.get("id"), "name": l.get("name"), "country": l.get("country")}
-                for l in results
-            ],
-        }
-    except Exception as e:
-        return {"error": str(e)}
-
-
-@app.get("/api/admin/bzz-sync")
-def bzz_sync_ep(request: Request):
-    _admin_guard(request)
-    lid = request.query_params.get("league_id", "")
-    if not lid:
-        raise HTTPException(400, "league_id required")
-    try:
-        from bzz_sync import sync_league
-        return sync_league(int(lid))
-    except Exception as e:
-        import traceback
-        return {"ok": False, "error": str(e), "traceback": traceback.format_exc()}
-
-@app.get("/api/admin/bzz-league-info")
-def bzz_league_info(request: Request):
-    """Look up a Bzzoiro league by ID and show its name + registry match."""
-    _admin_guard(request)
-    lid = request.query_params.get("league_id", "")
-    if not lid:
-        raise HTTPException(400, "league_id required")
-    h = _bzz_headers()
-    if not h:
-        return {"error": "BZZOIRO_TOKEN not set"}
-    from registry_map import match_tournament
-    try:
-        with httpx.Client(timeout=15, headers=h) as c:
-            r = c.get(f"{BZZ_BASE}/leagues/{lid}/")
-        if r.status_code != 200:
-            return {"status": r.status_code, "error": r.text[:200]}
-        lg = r.json()
-        name = lg.get("name") or ""
-        return {
-            "id": lg.get("id"),
-            "name": name,
-            "country": lg.get("country"),
-            "current_season": (lg.get("current_season") or {}).get("name"),
-            "registry_match": match_tournament(name),
-        }
-    except Exception as e:
-        return {"error": str(e)}
-
-@app.get("/api/admin/bzz-sync-all")
-def bzz_sync_all(request: Request):
-    _admin_guard(request)
-    from bzz_sync import start_sync_all
-    return start_sync_all()
-
-
-@app.get("/api/admin/bzz-progress")
-def bzz_progress(request: Request):
-    _admin_guard(request)
-    from bzz_sync import get_state
-    return get_state()
-
-
-@app.get("/api/admin/bzz-stop")
-def bzz_stop(request: Request):
-    _admin_guard(request)
-    from bzz_sync import stop_sync
-    return stop_sync()
-
-
-# ═══════════════════════════════════════════════════════
-#  TRANSFERS — GNews-powered, cached, multi-region
-# ═══════════════════════════════════════════════════════
-_transfers_cache = {"at": 0, "items": []}
-
-# Region-specific query strings. GNews supports plain text.
-_TRANSFER_QUERIES = {
-    "europe":  "football transfer Premier League OR La Liga OR Serie A OR Bundesliga OR Ligue 1",
-    "africa":  "football transfer NPFL OR CAF OR Egypt OR Morocco OR South Africa",
-    "americas":"football transfer MLS OR Liga MX OR Brasileirao OR Argentine OR Libertadores",
-    "asia":    "football transfer Saudi Pro League OR J-League OR AFC Champions League",
-    "world":   "football transfer signing OR loan OR fee agreed",
-}
-
-
-@app.get("/api/transfers/live")
-def transfers_live(region: str = "world", limit: int = 30):
-    """
-    Live transfer news from GNews. Cached 15 min per region.
-    Falls back to DB transfers table if GNews has nothing.
-    """
-    if not GNEWS_KEY:
-        return _fallback_transfers(region, limit,
-            note="GNEWS_KEY not set. Showing DB transfers only.")
-
-    key = f"live:{region}"
-    now = time.time()
-    cache_entry = _transfers_cache.get(key)
-    if cache_entry and now - cache_entry["at"] < 900 and cache_entry["items"]:
-        return {"region": region, "source": "gnews-cache", "transfers": cache_entry["items"][:limit]}
-
-    query = _TRANSFER_QUERIES.get(region, _TRANSFER_QUERIES["world"])
-
-    try:
-        with httpx.Client(timeout=20) as c:
-            r = c.get("https://gnews.io/api/v4/search", params={
-                "q": query,
-                "lang": "en",
-                "max": 30,
-                "sortby": "publishedAt",
-                "apikey": GNEWS_KEY,
-            })
-            data = r.json()
-    except Exception as e:
-        return _fallback_transfers(region, limit, note=f"GNews error: {e}")
-
-    if "errors" in data or "error" in data:
-        return _fallback_transfers(region, limit,
-            note=str(data.get("errors") or data.get("error")))
-
-    articles = data.get("articles", [])
-    items = []
-    for a in articles:
-        title = a.get("title") or ""
-        desc = a.get("description") or ""
-        # Extract player/from/to/fee from title when possible
-        player, from_club, to_club, fee = _parse_transfer(title)
-
-        items.append({
-            "player_name": player or title[:80],
-            "from_club": from_club,
-            "to_club": to_club,
-            "fee": fee,
-            "transfer_type": "news",
-            "date": (a.get("publishedAt") or "")[:10],
-            "source": (a.get("source") or {}).get("name"),
-            "url": a.get("url"),
-            "image": a.get("image"),
-            "title": title,
-            "description": desc,
-            "published_at": a.get("publishedAt"),
-        })
-
-    _transfers_cache[key] = {"at": now, "items": items}
-    return {"region": region, "source": "gnews", "transfers": items[:limit]}
-
-
-def _fallback_transfers(region: str, limit: int, note: str = ""):
-    """Read from DB if GNews gave nothing."""
-    db = SessionLocal()
-    try:
-        rows = db.query(Transfer).order_by(Transfer.date.desc()).limit(limit).all()
-        items = [
-            {
-                "player_name": r.player_name,
-                "from_club": r.from_club,
-                "to_club": r.to_club,
-                "fee": r.fee,
-                "transfer_type": r.transfer_type,
-                "date": r.date,
-                "source": r.source,
-                "url": r.source_url,
-            }
-            for r in rows
-        ]
-        return {"region": region, "source": "db", "note": note, "transfers": items}
-    finally:
-        db.close()
-
-
-def _parse_transfer(title: str):
-    """
-    Best-effort parse: 'Arsenal sign Viktor Gyokeres for £55m'
-    Returns (player, from_club, to_club, fee).
-    """
-    import re
-    player = from_club = to_club = fee = None
-
-    # Fee: £55m, €80m, $100m
-    m = re.search(r"[£€$]\s?\d+(?:\.\d+)?\s?(?:m|million|k)", title, re.IGNORECASE)
-    if m:
-        fee = m.group(0)
-
-    # 'X sign Y' or 'X signs Y' — X is destination
-    m = re.search(r"^([A-Z][\w\s\.\-]+?)\s+(?:sign|signs|complete|completed|agree|agrees|seal|seals)\s+(.+)", title)
-    if m:
-        to_club = m.group(1).strip()
-
-    # 'X join Y' — Y is destination
-    m = re.search(r"^([A-Z][\w\s\.\-]+?)\s+(?:join|joins)\s+([A-Z][\w\s\.\-]+)", title)
-    if m:
-        player = m.group(1).strip()
-        to_club = to_club or m.group(2).strip()
-
-    return player, from_club, to_club, fee
-
-
-@app.get("/api/transfers/regions")
-def transfers_regions():
-    """List available regions for the transfer widget."""
-    return {"regions": [
-        {"id": "world",    "name": "🌍 Worldwide"},
-        {"id": "europe",   "name": "🇪🇺 Europe"},
-        {"id": "africa",   "name": "🌍 Africa"},
-        {"id": "americas", "name": "🌎 Americas"},
-        {"id": "asia",     "name": "🌏 Asia"},
-    ]}
-
-# ═══════════════════════════════════════════════════════
-#  ADMIN — Transfermarkt CSV (bulk import)
-# ═══════════════════════════════════════════════════════
-@app.get("/api/admin/tm-check")
-def tm_check(request: Request):
-    _admin_guard(request)
-    urls = [
-        "https://raw.githubusercontent.com/salimt/football-datasets/main/datalake/transfermarkt/team_details/team_details.csv",
-        "https://raw.githubusercontent.com/salimt/football-datasets/main/datalake/transfermarkt/player_profiles/player_profiles.csv",
-    ]
-    out = []
-    try:
-        with httpx.Client(timeout=60, follow_redirects=True) as c:
-            for u in urls:
-                r = c.head(u)
-                size = int(r.headers.get("content-length") or 0)
-                out.append({
-                    "file": u.split("/")[-1],
-                    "status": r.status_code,
-                    "size_mb": round(size / 1024 / 1024, 2),
-                })
-        return {"sources": out, "all_ok": all(x["status"] == 200 for x in out)}
-    except Exception as e:
-        return {"error": str(e)}
-
-@app.post("/api/admin/tm-import")
-def tm_import_ep(request: Request):
-    _admin_guard(request)
-    try:
-        from tm_import import import_all
-        return import_all()
-    except Exception as e:
-        import traceback
-        return {"ok": False, "error": str(e), "traceback": traceback.format_exc()}
-
-@app.get("/api/admin/tm-inspect")
-def tm_inspect(request: Request):
-    """Show first 5 lines of each CSV so we can see the actual columns."""
-    _admin_guard(request)
-    out = {}
-    try:
-        with httpx.Client(timeout=60, follow_redirects=True) as c:
-            for label, url in [
-                ("teams", "https://raw.githubusercontent.com/salimt/football-datasets/main/datalake/transfermarkt/team_details/team_details.csv"),
-                ("players", "https://raw.githubusercontent.com/salimt/football-datasets/main/datalake/transfermarkt/player_profiles/player_profiles.csv"),
-            ]:
-                r = c.get(url, headers={"Range": "bytes=0-2000"})
-                text = r.text or ""
-                lines = text.split("\n")[:4]
-                out[label] = {
-                    "status": r.status_code,
-                    "content_length": r.headers.get("content-length"),
-                    "lines": lines,
-                }
-        return out
-    except Exception as e:
-        return {"error": str(e)}
-
-
 @app.post("/api/fantasy/sync-club")
-def sync_single_club(request: Request, tid: str = "", cid: str = ""):
-    """
-    Sync one club's squad from Bzzoiro on demand.
-    Looks up the club by its registry key and finds the corresponding Bzzoiro team.
-    """
-    require_user(request, None)  # allow public; remove if you want auth-only
-
+def sync_single_club(request: Request, tid: str = "", cid: str = "",
+                     db: Session = Depends(get_db)):
+    """Sync one club's squad from Bzzoiro on demand."""
     if not tid or not cid:
         raise HTTPException(400, "tid and cid required")
 
     registry_key = f"{tid}:{cid}"
 
-    # Check if club already has players — no need to resync
-    db = SessionLocal()
-    try:
-        existing = db.query(Player).filter_by(club_id=registry_key).count()
-        if existing > 0:
-            return {"ok": True, "cached": True, "players": existing, "message": "Already populated."}
-    finally:
-        db.close()
+    # Already has players? Done.
+    existing = db.query(Player).filter_by(club_id=registry_key).count()
+    if existing > 0:
+        return {"ok": True, "cached": True, "players": existing, "message": "Already populated."}
 
-    # Not in DB. Look up the club name from the registry on the frontend side
-    # by searching the bzz_* clubs table for a name match.
+    # Look up which Bzzoiro club matches this registry entry
     from registry_map import REGISTRY, match_club
     t = REGISTRY.get(tid)
     if not t:
-        raise HTTPException(404, f"Tournament '{tid}' not in registry")
-    aliases = t["clubs"].get(cid)
-    if not aliases:
-        raise HTTPException(404, f"Club '{cid}' not in registry for '{tid}'")
+        return {"ok": False, "error": f"Tournament '{tid}' not in registry"}
 
-    # Search all bzz_* clubs for a name match
-    db = SessionLocal()
-    try:
-        candidates = db.query(Club).filter(Club.id.like("bzz_%")).all()
-        target = None
-        for c in candidates:
-            if match_club(tid, c.name) == cid:
-                target = c
-                break
-        if not target:
-            # Not in DB either. Fetch from Bzzoiro and write.
-            return {"ok": False, "error": "Club not yet synced from Bzzoiro. Run Sync All from /admin.html first."}
-        bzz_club_id = target.id  # e.g. "bzz_9:755"
-    finally:
-        db.close()
+    # Find bzz_* club whose name maps to this registry club
+    bzz_clubs = db.query(Club).filter(Club.id.like("bzz_%")).all()
+    target_id = None
+    target_name = None
+    target_country = ""
+    for c in bzz_clubs:
+        if match_club(tid, c.name) == cid:
+            target_id = c.id
+            target_name = c.name
+            target_country = c.country or ""
+            break
 
-    # Sync the Bzzoiro squad for this one team
-    from bzz_sync import _h, BASE, _extract_list, _pos
-    import httpx, time
-    h = _h()
+    if not target_id:
+        return {
+            "ok": False,
+            "error": "Club not yet in Bzzoiro DB. Run Sync All from /admin.html first."
+        }
+
+    team_id = target_id.split(":")[-1]
+
+    # Fetch squad from Bzzoiro
+    h = _bzz_headers()
     if not h:
-        raise HTTPException(500, "BZZOIRO_TOKEN not set")
-    team_id = bzz_club_id.split(":")[-1]
+        return {"ok": False, "error": "BZZOIRO_TOKEN not set on Render"}
 
-    with httpx.Client(timeout=30, headers=h) as c:
-        r = c.get(f"{BASE}/teams/{team_id}/squad/")
-        if r.status_code != 200:
-            return {"ok": False, "error": f"Bzzoiro HTTP {r.status_code}"}
-        squad = _extract_list(r.json())
-
-    db = SessionLocal()
     try:
-        from storage import upsert_club, upsert_player
-        # Ensure the registry club exists
+        with httpx.Client(timeout=30, headers=h) as c:
+            r = c.get(f"{BZZ_BASE}/teams/{team_id}/squad/")
+            if r.status_code != 200:
+                return {"ok": False, "error": f"Bzzoiro HTTP {r.status_code}"}
+            payload = r.json()
+    except Exception as e:
+        return {"ok": False, "error": f"Bzzoiro fetch failed: {e}"}
+
+    # Extract squad list
+    squad = payload if isinstance(payload, list) else (
+        payload.get("results") if isinstance(payload, dict) else []
+    ) or []
+
+    # Write to DB
+    from storage import upsert_club, upsert_player
+
+    def _pos(code):
+        ch = (code or "").upper()[:1]
+        return {"G": "GK", "D": "DEF", "M": "MID", "F": "FWD"}.get(ch, "MID")
+
+    try:
         upsert_club(db, {
             "id": registry_key,
             "tournament_id": tid,
-            "name": target.name,
-            "country": target.country,
+            "name": target_name,
+            "country": target_country,
             "col": 0,
         })
         count = 0
@@ -929,92 +541,40 @@ def sync_single_club(request: Request, tid: str = "", cid: str = ""):
                 "club_id": registry_key,
                 "tournament_id": tid,
                 "number": p.get("shirt_number"),
-                "nationality": p.get("nationality"),
+                "nationality": p.get("nationality") or p.get("nationality_code"),
                 "market_value": p.get("market_value"),
                 "photo_url": p.get("image_url"),
             })
             count += 1
         db.commit()
         return {"ok": True, "players": count, "registry_key": registry_key}
-    finally:
-        db.close()
+    except Exception as e:
+        db.rollback()
+        return {"ok": False, "error": f"DB write failed: {e}"}
+
 
 # ═══════════════════════════════════════════════════════
-#  ADMIN — DB inspection
+#  NEWS — GNews proxy
 # ═══════════════════════════════════════════════════════
-@app.get("/api/admin/db-counts")
-def db_counts(request: Request):
-    _admin_guard(request)
-    from collections import Counter
-    db = SessionLocal()
+_news_cache = {"at": 0, "items": []}
+
+
+@app.get("/api/news")
+def get_news(category: str = "sports", limit: int = 25):
+    if not GNEWS_KEY:
+        return {"news": [], "note": "GNEWS_KEY not set on server."}
+
+    now = time.time()
+    if now - _news_cache["at"] < 900 and _news_cache["items"]:
+        return {"news": _news_cache["items"][:limit]}
+
     try:
-        clubs = db.query(Club).all()
-        players = db.query(Player).all()
-        transfers = db.query(Transfer).count()
-        return {
-            "clubs_total": len(clubs),
-            "players_total": len(players),
-            "transfers_total": transfers,
-            "clubs_by_tournament": dict(Counter(c.tournament_id for c in clubs)),
-            "players_by_tournament": dict(Counter(p.tournament_id for p in players)),
-        }
-    finally:
-        db.close()
-
-
-@app.get("/api/admin/db-logs")
-def db_logs(request: Request):
-    _admin_guard(request)
-    db = SessionLocal()
-    try:
-        rows = db.query(SyncLog).order_by(SyncLog.ran_at.desc()).limit(30).all()
-        return {"logs": [
-            {"task": r.task, "status": r.status, "count": r.count,
-             "message": r.message, "ran_at": r.ran_at}
-            for r in rows
-        ]}
-    finally:
-        db.close()
-
-
-@app.post("/api/admin/db-wipe-players")
-def db_wipe_players(request: Request):
-    _admin_guard(request)
-    db = SessionLocal()
-    try:
-        n = db.query(Player).delete()
-        db.commit()
-        return {"ok": True, "deleted": n}
-    finally:
-        db.close()
-
-
-@app.post("/api/admin/db-wipe-all")
-def db_wipe_all(request: Request):
-    _admin_guard(request)
-    db = SessionLocal()
-    try:
-        p = db.query(Player).delete()
-        c = db.query(Club).delete()
-        t = db.query(Transfer).delete()
-        db.commit()
-        return {"ok": True, "players": p, "clubs": c, "transfers": t}
-    finally:
-        db.close()
-
-
-@app.post("/api/admin/db-wipe-transfers")
-def db_wipe_transfers(request: Request):
-    _admin_guard(request)
-    db = SessionLocal()
-    try:
-        n = db.query(Transfer).delete()
-        db.commit()
-        return {"ok": True, "deleted": n}
-    finally:
-        db.close()
-
-# ═══════════════════════════════════════════════════════
-#  STATIC — feedfront
-# ═══════════════════════════════════════════════════════
-app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
+        with httpx.Client(timeout=15) as c:
+            r = c.get("https://gnews.io/api/v4/top-headlines", params={
+                "category": category, "lang": "en", "max": 25, "apikey": GNEWS_KEY,
+            })
+            data = r.json()
+            if "errors" in data or "error" in data:
+                return {"news": [], "error": str(data.get("errors") or data.get("error"))}
+            items = []
+            for a in data
