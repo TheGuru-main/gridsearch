@@ -116,6 +116,15 @@ class Transfer(Base):
         UniqueConstraint("player_name", "from_club", "to_club", "date", name="uq_transfer"),
     )
 
+class SyncLog(Base):
+    __tablename__ = "sync_log"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    task = Column(String(64))
+    status = Column(String(16))
+    count = Column(Integer, default=0)
+    message = Column(Text)
+    ran_at = Column(Float, default=time.time)
+
 class SyncState(Base):
     __tablename__ = "sync_state"
 
@@ -132,14 +141,3 @@ class SyncState(Base):
     errors = Column(Text)
     started_at = Column(Float, default=0)
     updated_at = Column(Float, default=time.time)
-
-class SyncLog(Base):
-    __tablename__ = "sync_log"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    task = Column(String(64))
-    status = Column(String(16))
-    count = Column(Integer, default=0)
-    message = Column(Text)
-    ran_at = Column(Float, default=time.time)
-
