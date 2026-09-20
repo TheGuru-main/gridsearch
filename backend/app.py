@@ -577,4 +577,411 @@ def get_news(category: str = "sports", limit: int = 25):
             if "errors" in data or "error" in data:
                 return {"news": [], "error": str(data.get("errors") or data.get("error"))}
             items = []
-            for a in data
+            for a in data.get("articles", []):
+                items.append({
+                    "title": a.get("title"),
+                    "description": a.get("description"),
+                    "url": a.get("url"),
+                    "image": a.get("image"),
+                    "source": (a.get("source") or {}).get("name"),
+                    "published_at": a.get("publishedAt"),
+                })
+            _news_cache["items"] = items
+            _news_cache["at"] = now
+            return {"news": items[:limit]}
+    except Exception as e:
+        return {"news": [], "error": str(e)}
+
+
+# ═══════════════════════════════════════════════════════
+#  TRANSFERS LIVE — GNews multi-region
+# ═══════════════════════════════════════════════════════
+_transfers_cache = {}
+
+_TRANSFER_QUERIES = {
+    "europe":  "football transfer Premier League OR La Liga OR Serie A OR Bundesliga OR Ligue 1",
+    "africa":  "football transfer NPFL OR CAF OR Egypt OR Morocco OR South Africa",
+    "americas":"football transfer MLS OR Liga MX OR Brasileirao OR Argentine OR Libertadores",
+    "asia":    "football transfer Saudi Pro League OR J-League OR AFC Champions League",
+    "world":   "football transfer signing OR loan OR fee agreed",
+}
+
+
+@app.get("/api/transfers/live")
+def transfers_live(region: str = "world", limit: int = 30):
+    if not GNEWS_KEY:
+        return _fallback_transfers(region, limit, note="GNEWS_KEY not set.")
+
+    now = time.time()
+    entry = _transfers_cache.get(region)
+    if entry and now - entry["at"] < 900 and entry["items"]:
+        return {"region": region, "source": "gnews-cache", "transfers": entry["items"][:limit]}
+
+    query = _TRANSFER_QUERIES.get(region, _TRANSFER_QUERIES["world"])
+
+    try:
+        with httpx.Client(timeout=20) as c:
+            r = c.get("https://gnews.io/api/v4/search", params={
+                "q": query, "lang": "en", "max": 30,
+                "sortby": "publishedAt", "apikey": GNEWS_KEY,
+            })
+            data = r.json()
+    except Exception as e:
+        return _fallback_transfers(region, limit, note=f"GNews error: {e}")
+
+    if "errors" in data or "error" in data:
+        return _fallback_transfers(region, limit,
+            note=str(data.get("errors") or data.get("error")))
+
+    items = []
+    for a in data.get("articles", []):
+        title = a.get("title") or ""
+        player, from_club, to_club, fee = _parse_transfer(title)
+        items.append({
+            "player_name": player or title[:80],
+            "from_club": from_club, "to_club": to_club, "fee": fee,
+            "transfer_type": "news",
+            "date": (a.get("publishedAt") or "")[:10],
+            "source": (a.get("source") or {}).get("name"),
+            "url": a.get("url"), "image": a.get("image"),
+            "title": title, "description": a.get("description") or "",
+            "published_at": a.get("publishedAt"),
+        })
+
+    _transfers_cache[region] = {"at": now, "items": items}
+    return {"region": region, "source": "gnews", "transfers": items[:limit]}
+
+
+def _fallback_transfers(region: str, limit: int, note: str = ""):
+    db = SessionLocal()
+    try:
+        rows = db.query(Transfer).order_by(Transfer.date.desc()).limit(limit).all()
+        return {"region": region, "source": "db", "note": note, "transfers": [
+            {"player_name": r.player_name, "from_club": r.from_club,
+             "to_club": r.to_club, "fee": r.fee, "transfer_type": r.transfer_type,
+             "date": r.date, "source": r.source, "url": r.source_url}
+            for r in rows
+        ]}
+    finally:
+        db.close()
+
+
+def _parse_transfer(title: str):
+    import re
+    player = from_club = to_club = fee = None
+    m = re.search(r"[£€$]\s?\d+(?:\.\d+)?\s?(?:m|million|k)", title, re.IGNORECASE)
+    if m:
+        fee = m.group(0)
+    m = re.search(r"^([A-Z][\w\s\.\-]+?)\s+(?:sign|signs|complete|completed|agree|agrees|seal|seals)\s+(.+)", title)
+    if m:
+        to_club = m.group(1).strip()
+    m = re.search(r"^([A-Z][\w\s\.\-]+?)\s+(?:join|joins)\s+([A-Z][\w\s\.\-]+)", title)
+    if m:
+        player = m.group(1).strip()
+        to_club = to_club or m.group(2).strip()
+    return player, from_club, to_club, fee
+
+
+# ═══════════════════════════════════════════════════════
+#  HEALTH
+# ═══════════════════════════════════════════════════════
+@app.get("/api/health")
+def health():
+    return {"ok": True, "gameweek": current_gameweek()}
+
+
+# ═══════════════════════════════════════════════════════
+#  ADMIN — Environment diagnostic
+# ═══════════════════════════════════════════════════════
+@app.get("/api/admin/scraper-diag")
+def admin_scraper_diag(request: Request):
+    _admin_guard(request)
+    report = {"env": {}, "imports": {}}
+    report["env"]["DATABASE_URL_set"] = bool(os.environ.get("DATABASE_URL"))
+    report["env"]["GNEWS_KEY_set"] = bool(GNEWS_KEY)
+    report["env"]["BZZOIRO_TOKEN_set"] = bool(os.environ.get("BZZOIRO_TOKEN"))
+    report["env"]["SCRAPER_TOKEN_set"] = bool(os.environ.get("SCRAPER_TOKEN"))
+    try:
+        from database import engine
+        report["imports"]["database"] = "ok"
+        report["db_host"] = str(engine.url).split("@")[-1] if "@" in str(engine.url) else "?"
+    except Exception as e:
+        report["imports"]["database"] = f"FAIL: {e}"
+    for name in ("models", "tm_import", "bzz_sync"):
+        try:
+            __import__(name)
+            report["imports"][name] = "ok"
+        except Exception as e:
+            report["imports"][name] = f"FAIL: {e}"
+    try:
+        import httpx, csv
+        report["imports"]["deps"] = "ok"
+    except Exception as e:
+        report["imports"]["deps"] = f"FAIL: {e}"
+    return report
+
+
+# ═══════════════════════════════════════════════════════
+#  ADMIN — Bzzoiro
+# ═══════════════════════════════════════════════════════
+@app.get("/api/admin/bzz-test")
+def bzz_test(request: Request):
+    _admin_guard(request)
+    h = _bzz_headers()
+    if not h:
+        return {"error": "BZZOIRO_TOKEN not set"}
+    try:
+        with httpx.Client(timeout=15) as c:
+            r = c.get(f"{BZZ_BASE}/leagues/", headers=h)
+        return {"status": r.status_code, "body": r.json()}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+@app.get("/api/admin/bzz-leagues")
+def bzz_leagues(request: Request):
+    _admin_guard(request)
+    h = _bzz_headers()
+    if not h:
+        return {"error": "BZZOIRO_TOKEN not set"}
+    results = []
+    url = f"{BZZ_BASE}/leagues/"
+    try:
+        with httpx.Client(timeout=20) as c:
+            while url and len(results) < 300:
+                r = c.get(url, headers=h)
+                if r.status_code != 200:
+                    break
+                data = r.json()
+                results.extend(data.get("results") or [])
+                url = data.get("next")
+        return {"count": len(results), "leagues": [
+            {"id": l.get("id"), "name": l.get("name"), "country": l.get("country")}
+            for l in results
+        ]}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/admin/bzz-sync")
+def bzz_sync_ep(request: Request):
+    _admin_guard(request)
+    lid = request.query_params.get("league_id", "")
+    if not lid:
+        raise HTTPException(400, "league_id required")
+    try:
+        from bzz_sync import sync_league
+        return sync_league(int(lid))
+    except Exception as e:
+        import traceback
+        return {"ok": False, "error": str(e), "traceback": traceback.format_exc()}
+
+
+@app.get("/api/admin/bzz-league-info")
+def bzz_league_info(request: Request):
+    _admin_guard(request)
+    lid = request.query_params.get("league_id", "")
+    if not lid:
+        raise HTTPException(400, "league_id required")
+    h = _bzz_headers()
+    if not h:
+        return {"error": "BZZOIRO_TOKEN not set"}
+    from registry_map import match_tournament
+    try:
+        with httpx.Client(timeout=15, headers=h) as c:
+            r = c.get(f"{BZZ_BASE}/leagues/{lid}/")
+        if r.status_code != 200:
+            return {"status": r.status_code, "error": r.text[:200]}
+        lg = r.json()
+        name = lg.get("name") or ""
+        return {
+            "id": lg.get("id"), "name": name,
+            "country": lg.get("country"),
+            "current_season": (lg.get("current_season") or {}).get("name"),
+            "registry_match": match_tournament(name),
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/admin/bzz-sync-all")
+def bzz_sync_all(request: Request):
+    _admin_guard(request)
+    from bzz_sync import start_sync_all
+    return start_sync_all()
+
+
+@app.get("/api/admin/bzz-progress")
+def bzz_progress(request: Request):
+    _admin_guard(request)
+    from bzz_sync import get_state
+    return get_state()
+
+
+@app.get("/api/admin/bzz-stop")
+def bzz_stop(request: Request):
+    _admin_guard(request)
+    from bzz_sync import stop_sync
+    return stop_sync()
+
+
+# ═══════════════════════════════════════════════════════
+#  ADMIN — Transfermarkt CSV
+# ═══════════════════════════════════════════════════════
+@app.get("/api/admin/tm-check")
+def tm_check(request: Request):
+    _admin_guard(request)
+    urls = [
+        "https://raw.githubusercontent.com/salimt/football-datasets/main/datalake/transfermarkt/team_details/team_details.csv",
+        "https://raw.githubusercontent.com/salimt/football-datasets/main/datalake/transfermarkt/player_profiles/player_profiles.csv",
+    ]
+    out = []
+    try:
+        with httpx.Client(timeout=60, follow_redirects=True) as c:
+            for u in urls:
+                r = c.head(u)
+                size = int(r.headers.get("content-length") or 0)
+                out.append({
+                    "file": u.split("/")[-1],
+                    "status": r.status_code,
+                    "size_mb": round(size / 1024 / 1024, 2),
+                })
+        return {"sources": out, "all_ok": all(x["status"] == 200 for x in out)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/admin/tm-import")
+def tm_import_ep(request: Request):
+    _admin_guard(request)
+    try:
+        from tm_import import import_all
+        return import_all()
+    except Exception as e:
+        import traceback
+        return {"ok": False, "error": str(e), "traceback": traceback.format_exc()}
+
+
+@app.get("/api/admin/tm-inspect")
+def tm_inspect(request: Request):
+    _admin_guard(request)
+    out = {}
+    try:
+        with httpx.Client(timeout=60, follow_redirects=True) as c:
+            for label, url in [
+                ("teams", "https://raw.githubusercontent.com/salimt/football-datasets/main/datalake/transfermarkt/team_details/team_details.csv"),
+                ("players", "https://raw.githubusercontent.com/salimt/football-datasets/main/datalake/transfermarkt/player_profiles/player_profiles.csv"),
+            ]:
+                r = c.get(url, headers={"Range": "bytes=0-2000"})
+                out[label] = {
+                    "status": r.status_code,
+                    "content_length": r.headers.get("content-length"),
+                    "lines": (r.text or "").split("\n")[:4],
+                }
+        return out
+    except Exception as e:
+        return {"error": str(e)}
+
+
+# ═══════════════════════════════════════════════════════
+#  ADMIN — DB inspection
+# ═══════════════════════════════════════════════════════
+@app.get("/api/admin/db-counts")
+def db_counts(request: Request):
+    _admin_guard(request)
+    from collections import Counter
+    db = SessionLocal()
+    try:
+        clubs = db.query(Club).all()
+        players = db.query(Player).all()
+        transfers = db.query(Transfer).count()
+        return {
+            "clubs_total": len(clubs),
+            "players_total": len(players),
+            "transfers_total": transfers,
+            "clubs_by_tournament": dict(Counter(c.tournament_id for c in clubs)),
+            "players_by_tournament": dict(Counter(p.tournament_id for p in players)),
+        }
+    finally:
+        db.close()
+
+
+@app.get("/api/admin/db-logs")
+def db_logs(request: Request):
+    _admin_guard(request)
+    db = SessionLocal()
+    try:
+        rows = db.query(SyncLog).order_by(SyncLog.ran_at.desc()).limit(30).all()
+        return {"logs": [
+            {"task": r.task, "status": r.status, "count": r.count,
+             "message": r.message, "ran_at": r.ran_at}
+            for r in rows
+        ]}
+    finally:
+        db.close()
+
+
+@app.post("/api/admin/db-wipe-players")
+def db_wipe_players(request: Request):
+    _admin_guard(request)
+    db = SessionLocal()
+    try:
+        n = db.query(Player).delete()
+        db.commit()
+        return {"ok": True, "deleted": n}
+    finally:
+        db.close()
+
+
+@app.post("/api/admin/db-wipe-all")
+def db_wipe_all(request: Request):
+    _admin_guard(request)
+    db = SessionLocal()
+    try:
+        p = db.query(Player).delete()
+        c = db.query(Club).delete()
+        t = db.query(Transfer).delete()
+        db.commit()
+        return {"ok": True, "players": p, "clubs": c, "transfers": t}
+    finally:
+        db.close()
+
+
+@app.post("/api/admin/db-wipe-transfers")
+def db_wipe_transfers(request: Request):
+    _admin_guard(request)
+    db = SessionLocal()
+    try:
+        n = db.query(Transfer).delete()
+        db.commit()
+        return {"ok": True, "deleted": n}
+    finally:
+        db.close()
+
+
+@app.post("/api/admin/db-clean")
+def db_clean(request: Request):
+    """
+    Delete any tm:* or bzz_* row that didn't map into a registry tournament.
+    Preserves rows whose tournament_id matches a registry key.
+    """
+    _admin_guard(request)
+    from sqlalchemy import text
+    db = SessionLocal()
+    try:
+        p = db.execute(text(
+            "DELETE FROM players WHERE tournament_id LIKE 'tm%' OR tournament_id LIKE 'bzz\\_%' ESCAPE '\\'"
+        )).rowcount
+        c = db.execute(text(
+            "DELETE FROM clubs WHERE tournament_id LIKE 'tm%' OR tournament_id LIKE 'bzz\\_%' ESCAPE '\\'"
+        )).rowcount
+        db.commit()
+        return {"ok": True, "players_deleted": p, "clubs_deleted": c}
+    finally:
+        db.close()
+
+
+# ═══════════════════════════════════════════════════════
+#  STATIC — must be last
+# ═══════════════════════════════════════════════════════
+app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
