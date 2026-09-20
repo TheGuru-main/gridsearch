@@ -116,22 +116,22 @@ class Transfer(Base):
         UniqueConstraint("player_name", "from_club", "to_club", "date", name="uq_transfer"),
     )
 
-
-
 class SyncState(Base):
     __tablename__ = "sync_state"
-    id = Column(String(32), primary_key=True)         # e.g. "bzz_all"
-    running = Column(Integer, default=0)              # 0 or 1
+
+    id = Column(String(32), primary_key=True)
+    running = Column(Integer, default=0)
     current_index = Column(Integer, default=0)
     total_leagues = Column(Integer, default=0)
-    candidate_ids = Column(Text)                      # JSON list of league ids
-    completed_ids = Column(Text)                      # JSON list
+    candidate_ids = Column(Text)
+    completed_ids = Column(Text)
     clubs_written = Column(Integer, default=0)
     players_written = Column(Integer, default=0)
     mapped_clubs = Column(Integer, default=0)
-    errors = Column(Text)                             # JSON list
-    started_at = Column(Float)
-    updated_at = Column(Float)
+    unmapped_clubs = Column(Integer, default=0)
+    errors = Column(Text)
+    started_at = Column(Float, default=0)
+    updated_at = Column(Float, default=time.time)
 
 class SyncLog(Base):
     __tablename__ = "sync_log"
