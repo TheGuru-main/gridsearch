@@ -39,7 +39,7 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 # ═══════════════════════════════════════════════════════
 #  CONFIG
 # ═══════════════════════════════════════════════════════
-WELCOME_BYFLINTS = 1070
+WELCOME_BYFLINTS = 100000
 
 TOURNAMENT_BASE = {
     "npfl": 280, "egypt_pl": 195, "sa_psl": 180, "botola": 175,
