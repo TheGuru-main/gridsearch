@@ -1064,6 +1064,100 @@ def db_clean(request: Request):
         db.close()
 
 
+
+# ═══════════════════════════════════════════════════════
+#  BUBBLEJUMBO SECURITY TEST PAGE
+#  Served directly by FastAPI — no static folder needed
+#
+ ═══════════════════════════════════════════════════════
+from fastapi.responses import HTMLResponse
+
+@app.get("/bj-test", response_class=HTMLResponse)
+def bj_test_page():
+    return HTMLResponse(content="""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BubbleJumbo Security Test</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'JetBrains Mono',monospace;background:#0a0a0f;color:#e8e8f0;padding:16px;font-size:13px;line-height:1.5}
+h1{font-size:1rem;color:#00d2ff;margin-bottom:8px}
+h3{font-size:0.8rem;color:#b8aaff;margin:20px 0 8px;text-transform:uppercase;letter-spacing:.08em}
+button{padding:10px 18px;border-radius:6px;border:none;background:#6c5ce7;color:#fff;font-weight:700;font-size:13px;cursor:pointer;margin:4px 4px 4px 0;font-family:inherit}
+button:hover{background:#8b7cf7}
+button:disabled{background:#333;color:#666}
+pre{background:#12121a;border:1px solid #2a2a3d;border-radius:6px;padding:10px;font-size:11px;max-height:500px;overflow:auto;white-space:pre-wrap;word-break:break-word;color:#00ff88}
+pre.err{color:#ff6b6b}
+.note{background:#12121a;border-left:3px solid #ffd700;padding:8px 10px;font-size:.75rem;color:#aaa;margin:8px 0;border-radius:4px}
+.stat{display:flex;gap:16px;flex-wrap:wrap;margin:8px 0;font-size:.75rem}
+.stat .pill{padding:3px 10px;border-radius:12px;background:#1a1a26}
+.stat .pass{background:rgba(0,255,136,.15);color:#00ff88}
+.stat .trap{background:rgba(255,107,107,.15);color:#ff6b6b}
+.stat .blocked{background:rgba(255,215,0,.15);color:#ffd700}
+</style>
+</head>
+<body>
+<h1>&#128737;&#65039; BubbleJumbo Security Test</h1>
+<div class="note">Runs against this domain. Every request goes through BubbleJumbo middleware. Watch for <b>TRAP</b> after attack phases.</div>
+<h3>Run</h3>
+<button onclick="runAll()">&#9654; Run Full Test</button>
+<button onclick="runPhase('recon')">Recon</button>
+<button onclick="runPhase('brute')">Brute</button>
+<button onclick="runPhase('inject')">Inject</button>
+<button onclick="runPhase('flood')">Flood</button>
+<button onclick="runPhase('ua')">Bad UA</button>
+<button onclick="runPhase('phish')">Phishing</button>
+<button onclick="clearLog()">Clear</button>
+<div class="stat">
+<span class="pill">pass: <span id="s-pass">0</span></span>
+<span class="pill trap">trap: <span id="s-trap">0</span></span>
+<span class="pill blocked">blocked: <span id="s-blocked">0</span></span>
+<span class="pill">errors: <span id="s-err">0</span></span>
+</div>
+<h3>Output</h3>
+<pre id="log">Ready. Tap "Run Full Test".</pre>
+<script>
+(function(){
+var stats={pass:0,trap:0,blocked:0,err:0};
+function target(){return window.location.origin}
+function log(m,e){var el=document.getElementById('log');el.textContent+="\\n"+m;el.scrollTop=el.scrollHeight;if(e)el.className='err'}
+function clearLog(){document.getElementById('log').textContent='Ready.';stats={pass:0,trap:0,blocked:0,err:0};renderStats()}
+function renderStats(){document.getElementById('s-pass').textContent=stats.pass;document.getElementById('s-trap').textContent=stats.trap;document.getElementById('s-blocked').textContent=stats.blocked;document.getElementById('s-err').textContent=stats.err}
+function sleep(ms){return new Promise(function(r){setTimeout(r,ms)})}
+async function probe(label,method,path,opts){
+opts=opts||{};var started=Date.now();var res,text;
+try{
+var init={method:method,redirect:'follow',credentials:'include',headers:opts.headers||{}};
+if(opts.json){init.headers['Content-Type']='application/json';init.body=JSON.stringify(opts.json)}
+res=await fetch(target()+path,init);text=await res.text();
+}catch(e){stats.err++;renderStats();log('['+label+'] NETWORK ERROR: '+e.message,true);return}
+var elapsed=Date.now()-started;
+var trap=text.indexOf('Verification Required')!==-1||text.indexOf('7x7')!==-1;
+var verdict=trap?'TRAP':([401,403,429].indexOf(res.status)!==-1?'BLOCKED':'PASS');
+var notice=res.headers.get('x-bj-notice')||'';
+if(verdict==='TRAP')stats.trap++;else if(verdict==='BLOCKED')stats.blocked++;else stats.pass++;
+renderStats();
+log('['+label+'] status='+res.status+' time='+elapsed+'ms verdict='+verdict+(notice?' notice='+notice:''));
+if(verdict!=='PASS')log('   body: '+text.slice(0,150).replace(/\\s+/g,' '));
+}
+async function phaseRecon(){log('\\n---- Recon ----');var p=['/admin','/.env','/config.py','/wp-admin','/api/admin/db-counts'];for(var i=0;i<p.length;i++){await probe(p[i],'GET',p[i]);await sleep(150)}}
+async function phaseBrute(){log('\\n---- Brute login ----');for(var i=0;i<15;i++){await probe('login#'+(i+1),'POST','/api/auth/login',{json:{phone:'2348000000000',password:'guess'+i}});await sleep(150)}}
+async function phaseInject(){log('\\n---- Inject ----');await probe('sqli','GET',"/api/fantasy/clubs/epl:ars' UNION SELECT * FROM users--/players");await probe('trav','GET','/api/openbox/file/../../etc/passwd');await probe('xss','GET','/api/fantasy/tournaments?q=<script>alert(1)</script>')}
+async function phaseFlood(){log('\\n---- Flood 30 ----');for(var i=0;i<30;i++){try{var r=await fetch(target()+'/api/health');if(r.status===429){log('   rate-limited at #'+(i+1));return}}catch(e){log('   err #'+(i+1)+': '+e.message,true);return}}log('   completed 30 with no rate-limit')}
+async function phaseUA(){log('\\n---- Bad UA ----');var a=['sqlmap/1.7','Nikto','Nmap NSE','curl/8.4',''];for(var i=0;i<a.length;i++){await probe('ua='+(a[i]||'empty'),'GET','/api/health',{headers:{'User-Agent':a[i]}});await sleep(150)}}
+async function phasePhish(){log('\\n---- Phishing ----');await probe('bj_flag','GET','/?bj_phishing=1');await probe('referer','GET','/',{headers:{'Referer':'https://evil.example.com/login'}});await probe('both','GET','/?bj_phishing=1',{headers:{'Referer':'https://phish.example.com/steal'}})}
+async function runPhase(n){clearLog();if(n==='recon')await phaseRecon();if(n==='brute')await phaseBrute();if(n==='inject')await phaseInject();if(n==='flood')await phaseFlood();if(n==='ua')await phaseUA();if(n==='phish')await phasePhish()}
+async function runAll(){clearLog();log('Target: '+target());await probe('baseline-home','GET','/');await probe('baseline-health','GET','/api/health');await phaseRecon();await phaseBrute();await phaseInject();await phaseFlood();await phaseUA();await phasePhish();log('\\n==== DONE ====');log('Summary: pass='+stats.pass+' trap='+stats.trap+' blocked='+stats.blocked+' errors='+stats.err)}
+window.runAll=runAll;window.runPhase=runPhase;window.clearLog=clearLog;
+})();
+</script>
+</body>
+</html>
+""")
+
 # ═══════════════════════════════════════════════════════
 #  STATIC — must be last
 # ═══════════════════════════════════════════════════════
