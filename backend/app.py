@@ -1070,12 +1070,16 @@ def db_clean(request: Request):
 #  Served directly by FastAPI — no static folder needed
 #
  ═══════════════════════════════════════════════════════
+
+# ============================================================
+#  BUBBLEJUMBO SECURITY TEST PAGE
+#  Served directly by FastAPI - no static folder needed
+# ============================================================
 from fastapi.responses import HTMLResponse
 
 @app.get("/bj-test", response_class=HTMLResponse)
 def bj_test_page():
-    return HTMLResponse(content="""
-<!DOCTYPE html>
+    html = """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1083,12 +1087,11 @@ def bj_test_page():
 <title>BubbleJumbo Security Test</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'JetBrains Mono',monospace;background:#0a0a0f;color:#e8e8f0;padding:16px;font-size:13px;line-height:1.5}
+body{font-family:monospace;background:#0a0a0f;color:#e8e8f0;padding:16px;font-size:13px;line-height:1.5}
 h1{font-size:1rem;color:#00d2ff;margin-bottom:8px}
 h3{font-size:0.8rem;color:#b8aaff;margin:20px 0 8px;text-transform:uppercase;letter-spacing:.08em}
 button{padding:10px 18px;border-radius:6px;border:none;background:#6c5ce7;color:#fff;font-weight:700;font-size:13px;cursor:pointer;margin:4px 4px 4px 0;font-family:inherit}
 button:hover{background:#8b7cf7}
-button:disabled{background:#333;color:#666}
 pre{background:#12121a;border:1px solid #2a2a3d;border-radius:6px;padding:10px;font-size:11px;max-height:500px;overflow:auto;white-space:pre-wrap;word-break:break-word;color:#00ff88}
 pre.err{color:#ff6b6b}
 .note{background:#12121a;border-left:3px solid #ffd700;padding:8px 10px;font-size:.75rem;color:#aaa;margin:8px 0;border-radius:4px}
@@ -1100,10 +1103,10 @@ pre.err{color:#ff6b6b}
 </style>
 </head>
 <body>
-<h1>&#128737;&#65039; BubbleJumbo Security Test</h1>
-<div class="note">Runs against this domain. Every request goes through BubbleJumbo middleware. Watch for <b>TRAP</b> after attack phases.</div>
+<h1>BubbleJumbo Security Test</h1>
+<div class="note">Runs against this domain. Every request goes through BubbleJumbo middleware. Watch for TRAP after attack phases.</div>
 <h3>Run</h3>
-<button onclick="runAll()">&#9654; Run Full Test</button>
+<button onclick="runAll()">Run Full Test</button>
 <button onclick="runPhase('recon')">Recon</button>
 <button onclick="runPhase('brute')">Brute</button>
 <button onclick="runPhase('inject')">Inject</button>
@@ -1118,7 +1121,7 @@ pre.err{color:#ff6b6b}
 <span class="pill">errors: <span id="s-err">0</span></span>
 </div>
 <h3>Output</h3>
-<pre id="log">Ready. Tap "Run Full Test".</pre>
+<pre id="log">Ready. Tap Run Full Test.</pre>
 <script>
 (function(){
 var stats={pass:0,trap:0,blocked:0,err:0};
@@ -1155,8 +1158,8 @@ window.runAll=runAll;window.runPhase=runPhase;window.clearLog=clearLog;
 })();
 </script>
 </body>
-</html>
-""")
+</html>"""
+    return HTMLResponse(content=html)
 
 # ═══════════════════════════════════════════════════════
 #  STATIC — must be last
