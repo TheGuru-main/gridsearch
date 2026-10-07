@@ -1064,6 +1064,69 @@ def db_clean(request: Request):
         db.close()
 
 
+
+# ============================================================
+#  BUBBLEJUMBO CONNECTION DIAGNOSTIC
+# ============================================================
+@app.get("/api/bj-diag")
+async def bj_diag():
+    """Test whether GSF can reach the BubbleJumbo backend."""
+    import httpx
+    import os
+
+    url = os.environ.get("BUBBLEJUMBO_URL", "https://bubblejumbosecurityv1.onrender.com")
+    result = {
+        "env_var": os.environ.get("BUBBLEJUMBO_URL", "(not set, using default)"),
+        "resolved_url": url,
+        "tests": [],
+    }
+
+    # Test 1 — root reachable?
+    try:
+        with httpx.Client(timeout=5) as c:
+            r = c.get(url.rstrip("/") + "/")
+        result["tests"].append({
+            "name": "root",
+            "url": url + "/",
+            "status": r.status_code,
+            "body": r.text[:200],
+        })
+    except Exception as e:
+        result["tests"].append({"name": "root", "error": str(e)})
+
+    # Test 2 — /api/health reachable?
+    try:
+        with httpx.Client(timeout=5) as c:
+            r = c.get(url.rstrip("/") + "/api/health")
+        result["tests"].append({
+            "name": "api/health",
+            "url": url + "/api/health",
+            "status": r.status_code,
+            "body": r.text[:200],
+        })
+    except Exception as e:
+        result["tests"].append({"name": "api/health", "error": str(e)})
+
+    # Test 3 — /api/ingest reachable? (this is the endpoint the middleware calls)
+    try:
+        with httpx.Client(timeout=5) as c:
+            r = c.post(url.rstrip("/") + "/api/ingest", json={
+                "session_id": "diag-test",
+                "payload": {"path": "/diag", "verb": "GET", "body": "", "ip": "127.0.0.1"},
+                "headers": {},
+                "is_phishing_screen": False,
+            })
+        result["tests"].append({
+            "name": "api/ingest",
+            "url": url + "/api/ingest",
+            "status": r.status_code,
+            "body": r.text[:300],
+        })
+    except Exception as e:
+        result["tests"].append({"name": "api/ingest", "error": str(e)})
+
+    return result
+
 # ============================================================
 #  BUBBLEJUMBO SECURITY TEST PAGE
 #  Served directly by FastAPI - no static folder needed
