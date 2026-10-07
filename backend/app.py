@@ -1064,13 +1064,6 @@ def db_clean(request: Request):
         db.close()
 
 
-
-# ═══════════════════════════════════════════════════════
-#  BUBBLEJUMBO SECURITY TEST PAGE
-#  Served directly by FastAPI — no static folder needed
-#
- ═══════════════════════════════════════════════════════
-
 # ============================================================
 #  BUBBLEJUMBO SECURITY TEST PAGE
 #  Served directly by FastAPI - no static folder needed
