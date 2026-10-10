@@ -25,8 +25,6 @@ SKIP_PATHS = (
     "/api/bj/",
 )
 
-
-# Paths that always get inspected (sensitive).
 SENSITIVE_PATHS = (
     "/api/session",
     "/api/wallet",
@@ -38,10 +36,15 @@ SENSITIVE_PATHS = (
     "/api/purchase",
     "/api/account",
     "/api/admin",
+    "/api/auth",
+    "/api/health",
+    "/api/openbox",
     "/login",
     "/register",
+    "/admin",
+    "/.env",
+    "/config",
 )
-
 
 class BubbleJumboMiddleware(BaseHTTPMiddleware):
     """
