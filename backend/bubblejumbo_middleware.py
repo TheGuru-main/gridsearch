@@ -14,12 +14,12 @@ SKIP_PATHS = (
     "/openapi.json",
     "/api/bj/",
     "/api/bj-debug",
+    "/api/bj-scores",
 )
 
 
 class BubbleJumboMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        # Debug log
         if os.environ.get("BJ_DEBUG", "1") == "1":
             try:
                 with open("/tmp/bj_debug.log", "a") as f:
@@ -52,8 +52,10 @@ class BubbleJumboMiddleware(BaseHTTPMiddleware):
 
             request._receive = receive
 
+        # Include the raw query string so the backend can inspect it
         payload = {
             "path": path,
+            "query": str(request.url.query or ""),
             "verb": request.method,
             "body": body.decode("utf-8", errors="ignore")[:4096],
             "ip": request.client.host if request.client else "",
@@ -67,7 +69,6 @@ class BubbleJumboMiddleware(BaseHTTPMiddleware):
         )
         data = result.get("data", {}) or {}
 
-        # Log the ingest result so we can diagnose from the browser
         try:
             with open("/tmp/bj_scores.log", "a") as f:
                 f.write(
@@ -90,11 +91,10 @@ class BubbleJumboMiddleware(BaseHTTPMiddleware):
         action = data.get("action", "allow")
         status = data.get("status", "unknown")
 
+        # If the backend says trap, we trap. No second-guessing.
+        # The backend already protects primary users by returning
+        # "watch" instead of "trap" for soft signals.
         if action == "trap" or status == "trap":
-            if kind == "primary" and not is_phishing:
-                response = await call_next(request)
-                self._set_cookies(response, session_id, kind, new_session)
-                return response
             trap_html = await bj_client.trap_html(session_id)
             if trap_html:
                 response = HTMLResponse(content=trap_html, status_code=403)
@@ -161,7 +161,7 @@ async def mark_suspicious(request: Request):
         return {"ok": False}
     r = await bj_client.ingest(
         session_id=sid,
-        payload={"path": "/phishing-detected", "verb": "POST", "body": "", "ip": ""},
+        payload={"path": "/phishing-detected", "query": "", "verb": "POST", "body": "", "ip": ""},
         headers={},
         is_phishing_screen=True,
     )
