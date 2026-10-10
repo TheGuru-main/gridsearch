@@ -52,7 +52,7 @@ class BubbleJumboMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
 
 # ─── DEBUG: log every request ───
-import os
+        import os
 _bj_debug = os.environ.get("BJ_DEBUG", "1") == "1"
 if _bj_debug:
     try:
