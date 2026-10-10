@@ -50,6 +50,17 @@ class BubbleJumboMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next):
+
+# ─── DEBUG: log every request ───
+import os
+_bj_debug = os.environ.get("BJ_DEBUG", "1") == "1"
+if _bj_debug:
+    try:
+        with open("/tmp/bj_debug.log", "a") as f:
+            f.write(f"{time.time()} {request.method} {request.url.path}\n")
+    except Exception:
+        pass
+
         path = request.url.path
 
         # Skip paths that never need inspection
