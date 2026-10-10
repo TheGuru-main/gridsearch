@@ -10,31 +10,10 @@ from bubblejumbo_client import bj_client
 SKIP_PATHS = (
     "/static",
     "/favicon.ico",
-    "/health",
     "/docs",
     "/openapi.json",
     "/api/bj/",
     "/api/bj-debug",
-)
-
-SENSITIVE_PATHS = (
-    "/api/session",
-    "/api/wallet",
-    "/api/upload",
-    "/api/download",
-    "/api/messages",
-    "/api/groups",
-    "/api/fantasy",
-    "/api/purchase",
-    "/api/account",
-    "/api/admin",
-    "/api/auth",
-    "/api/openbox",
-    "/login",
-    "/register",
-    "/admin",
-    "/.env",
-    "/config",
 )
 
 
@@ -64,11 +43,6 @@ class BubbleJumboMiddleware(BaseHTTPMiddleware):
 
         is_phishing = self._is_phishing(request)
 
-        if not (path.startswith(SENSITIVE_PATHS) or is_phishing):
-            response = await call_next(request)
-            self._set_cookies(response, session_id, kind, new_session)
-            return response
-
         body = b""
         if request.method in ("POST", "PUT", "PATCH"):
             body = await request.body()
@@ -92,6 +66,21 @@ class BubbleJumboMiddleware(BaseHTTPMiddleware):
             is_phishing_screen=is_phishing,
         )
         data = result.get("data", {}) or {}
+
+        # Log the ingest result so we can diagnose from the browser
+        try:
+            with open("/tmp/bj_scores.log", "a") as f:
+                f.write(
+                    str(_t.time()) + " " + request.method + " " + path +
+                    " | status=" + str(result.get("status")) +
+                    " ok=" + str(result.get("ok")) +
+                    " score=" + str(data.get("threat_score")) +
+                    " action=" + str(data.get("action")) +
+                    " fail_open=" + str(data.get("_fail_open")) +
+                    "\n"
+                )
+        except Exception:
+            pass
 
         if data.get("_fail_open"):
             response = await call_next(request)
