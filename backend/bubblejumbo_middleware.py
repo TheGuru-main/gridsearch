@@ -50,22 +50,90 @@ class BubbleJumboMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next):
+    # ---- debug log ----
+    import os, time as _t
+    if os.environ.get("BJ_DEBUG", "1") == "1":
+        try:
+            with open("/tmp/bj_debug.log", "a") as f:
+                f.write(f"{_t.time()} {request.method} {request.url.path}\n")
+        except Exception:
+            pass
 
-# ─── DEBUG: log every request ───
-        import os 
-_bj_debug = os.environ.get("BJ_DEBUG", "1") == "1"
-if _bj_debug: 
-           try:
-              with open("/tmp/bj_debug.log", "a") as f:
-                 f.write(f"{time.time()} {request.method} {request.url.path}\n")
-    except Exception:
-        pass
+    path = request.url.path
 
-        path = request.url.path
+    # Skip paths that never need inspection
+    if path.startswith(SKIP_PATHS):
+        return await call_next(request)
 
-        # Skip paths that never need inspection
-        if path.startswith(SKIP_PATHS):
-            return await call_next(request)
+    # Resolve session
+    session_id = request.cookies.get("snm_session")
+    new_session = not session_id
+    if not session_id:
+        session_id = "snm-" + uuid.uuid4().hex
+
+    kind = request.cookies.get("snm_kind", "primary")
+    if kind not in ("primary", "suspicious"):
+        kind = "primary"
+
+    is_phishing = self._is_phishing(request)
+
+    if not (path.startswith(SENSITIVE_PATHS) or is_phishing):
+        response = await call_next(request)
+        self._set_cookies(response, session_id, kind, new_session)
+        return response
+
+    body = b""
+    if request.method in ("POST", "PUT", "PATCH"):
+        body = await request.body()
+
+        async def receive():
+            return {"type": "http.request", "body": body, "more_body": False}
+
+        request._receive = receive
+
+    payload = {
+        "path": path,
+        "verb": request.method,
+        "body": body.decode("utf-8", errors="ignore")[:4096],
+        "ip": request.client.host if request.client else "",
+    }
+
+    result = await bj_client.ingest(
+        session_id=session_id,
+        payload=payload,
+        headers=dict(request.headers),
+        is_phishing_screen=is_phishing,
+    )
+    data = result.get("data", {}) or {}
+
+    if data.get("_fail_open"):
+        response = await call_next(request)
+        self._set_cookies(response, session_id, kind, new_session)
+        return response
+
+    action = data.get("action", "allow")
+    status = data.get("status", "unknown")
+
+    if action == "trap" and status == "trap":
+        if kind == "primary" and not is_phishing:
+            response = await call_next(request)
+            self._set_cookies(response, session_id, kind, new_session)
+            return response
+        trap_html = await bj_client.trap_html(session_id)
+        if trap_html:
+            response = HTMLResponse(content=trap_html, status_code=403)
+            self._set_cookies(response, session_id, kind, new_session)
+            return response
+        return JSONResponse(
+            status_code=403,
+            content={"error": "Security verification required."},
+        )
+
+    response = await call_next(request)
+    if action == "notify":
+        response.headers["X-BJ-Notice"] = "1"
+    self._set_cookies(response, session_id, kind, new_session)
+    return response
 
         # ─── Resolve session ───
         session_id = request.cookies.get("snm_session")
