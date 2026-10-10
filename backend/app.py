@@ -1217,6 +1217,24 @@ window.runAll=runAll;window.runPhase=runPhase;window.clearLog=clearLog;
 </html>"""
     return HTMLResponse(content=html)
 
+@app.get("/api/bj-debug")
+def bj_debug():
+    """Show the last 100 requests the middleware actually saw."""
+    import os
+    path = "/tmp/bj_debug.log"
+    if not os.path.exists(path):
+        return {
+            "exists": False,
+            "message": "No middleware log yet. Middleware may not be running.",
+        }
+    with open(path, "r") as f:
+        lines = f.readlines()[-100:]
+    return {
+        "exists": True,
+        "line_count": len(lines),
+        "entries": [ln.strip() for ln in lines],
+    }
+
 # ═══════════════════════════════════════════════════════
 #  STATIC — must be last
 # ═══════════════════════════════════════════════════════
