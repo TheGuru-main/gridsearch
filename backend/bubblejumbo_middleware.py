@@ -101,7 +101,7 @@ class BubbleJumboMiddleware(BaseHTTPMiddleware):
         action = data.get("action", "allow")
         status = data.get("status", "unknown")
 
-        if action == "trap" and status == "trap":
+        if action == "trap" or status == "trap":
             if kind == "primary" and not is_phishing:
                 response = await call_next(request)
                 self._set_cookies(response, session_id, kind, new_session)
